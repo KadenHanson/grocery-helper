@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>Meal DB</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: -apple-system, system-ui, sans-serif; background: #0a0a0a; color: #e8e8e8; min-height: 100vh; }
+
+  nav { display: flex; gap: 2px; padding: 12px 16px; background: #111; border-bottom: 1px solid #222; position: sticky; top: 0; z-index: 10; }
+  nav button { flex: 1; padding: 9px 0; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; background: transparent; color: #555; transition: all 0.15s; }
+  nav button.active { background: #e8e8e8; color: #0a0a0a; }
+
+  main { padding: 16px; max-width: 600px; margin: 0 auto; }
+  .tab { display: none; } .tab.active { display: block; }
+
+  h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.03em; color: #fff; margin: 16px 0 4px; }
+  .sub { font-size: 13px; color: #555; margin-bottom: 20px; }
+  .label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: #444; text-transform: uppercase; margin-bottom: 6px; display: block; }
+
+  .card { background: #161616; border: 1px solid #222; border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; cursor: pointer; user-select: none; }
+  .card-title { font-weight: 600; font-size: 14px; color: #e8e8e8; flex: 1; }
+  .badge { font-size: 11px; color: #555; background: #1e1e1e; padding: 2px 8px; border-radius: 20px; margin-left: 8px; white-space: nowrap; }
+  .badge.warn { color: #c8a04a; background: #2a2010; }
+  .card-body { padding: 0 14px 14px; border-top: 1px solid #1e1e1e; }
+
+  .ing-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid #1a1a1a; }
+  .ing-name { flex: 1; font-size: 13px; color: #ccc; }
+  .ing-qty { font-size: 12px; color: #666; background: #1e1e1e; padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
+
+  input, textarea { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 8px; color: #e8e8e8; font-size: 13px; padding: 9px 12px; outline: none; width: 100%; font-family: inherit; }
+  input::placeholder, textarea::placeholder { color: #444; }
+  textarea { resize: vertical; min-height: 100px; line-height: 1.5; }
+  input.sm { width: 60px; padding: 7px 10px; font-size: 12px; }
+  input.md { width: 80px; }
+
+  .row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .row input { flex: 1; }
+
+  button.btn { padding: 9px 16px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; font-size: 13px; font-family: inherit; background: #1e1e1e; color: #aaa; }
+  button.btn.primary { background: #e8e8e8; color: #0a0a0a; }
+  button.btn.danger { background: #3a1010; color: #ff6b6b; }
+  button.btn.sm { padding: 6px 12px; font-size: 12px; }
+  button.icon-btn { background: none; border: none; cursor: pointer; color: #555; font-size: 16px; padding: 2px 4px; line-height: 1; }
+  button.icon-btn.red { color: #c44; }
+
+  /* Plan tab */
+  .import-area { background: #161616; border: 1px solid #222; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  .import-btns { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  .plan-week { margin-bottom: 6px; }
+  .week-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: #444; text-transform: uppercase; padding: 8px 14px 4px; }
+  .plan-row { display: flex; align-items: flex-start; gap: 8px; padding: 9px 14px; border-top: 1px solid #1a1a1a; }
+  .plan-date { font-size: 11px; color: #444; width: 32px; flex-shrink: 0; padding-top: 2px; }
+  .plan-day { font-weight: 700; font-size: 12px; color: #555; width: 34px; flex-shrink: 0; padding-top: 2px; }
+  .plan-meal { flex: 1; font-size: 13px; color: #ccc; }
+  .plan-meal.unmatched { color: #c8a04a; }
+  .plan-meal.special { color: #555; font-style: italic; }
+
+  /* manual picker */
+  .day-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 12px; }
+  .day-btn { border: none; border-radius: 8px; padding: 10px 4px; text-align: center; cursor: pointer; font-size: 12px; font-weight: 600; background: #1a1a1a; color: #555; font-family: inherit; transition: all 0.1s; }
+  .day-btn.active { background: #e8e8e8; color: #0a0a0a; }
+  .picker-list { max-height: 220px; overflow-y: auto; }
+  .picker-item { padding: 11px 14px; cursor: pointer; border-top: 1px solid #1a1a1a; font-size: 13px; color: #ccc; }
+  .picker-item:active { background: #1e1e1e; }
+
+  /* Grocery */
+  .grocery-block { background: #161616; border: 1px solid #222; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  .grocery-item { font-size: 13px; color: #ccc; display: flex; align-items: stretch; border-bottom: 1px solid #1a1a1a; margin: 0 -16px; padding: 0 16px; }
+  .grocery-item:last-child { border-bottom: none; }
+  .grocery-item-body { flex: 1; padding: 13px 0; cursor: pointer; display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .grocery-item-body:active { opacity: 0.7; }
+  .grocery-item-name { flex: 1; min-width: 0; }
+  .grocery-item-qty { color: #555; font-size: 12px; flex-shrink: 0; }
+  .grocery-item-del { display: flex; align-items: center; justify-content: center; width: 52px; flex-shrink: 0; border-left: 1px solid #1e1e1e; margin-left: 12px; cursor: pointer; color: #3a3a3a; font-size: 20px; transition: color 0.15s; }
+  .grocery-item-del:active { color: #c44; }
+  .grocery-item.editing { flex-wrap: wrap; padding: 10px 16px; gap: 6px; align-items: center; }
+  .grocery-item.editing input { padding: 7px 10px; font-size: 13px; }
+  .grocery-qty { color: #555; margin-left: auto; white-space: nowrap; }
+
+  .tab-row { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .tab-pill { padding: 6px 14px; border-radius: 20px; border: 1px solid #2a2a2a; background: none; color: #555; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .tab-pill.active { border-color: #e8e8e8; color: #e8e8e8; }
+
+  .export-box { background: #0d0d0d; border: 1px solid #222; border-radius: 10px; padding: 14px; font-family: monospace; font-size: 12px; color: #aaa; white-space: pre-wrap; word-break: break-all; max-height: 260px; overflow-y: auto; margin-top: 12px; }
+  .copy-btn { display: flex; align-items: center; gap: 6px; padding: 10px 16px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; font-size: 13px; background: #1e1e1e; color: #aaa; margin-top: 12px; font-family: inherit; }
+
+  .empty-state { text-align: center; padding: 32px 20px; color: #444; font-size: 13px; }
+  .header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+
+  .toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: #e8e8e8; color: #0a0a0a; border-radius: 10px; padding: 10px 20px; font-weight: 600; font-size: 13px; z-index: 999; pointer-events: none; opacity: 0; transition: opacity 0.2s; white-space: nowrap; }
+  .toast.show { opacity: 1; }
+
+  .ing-add-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+  .ing-add-row input.name { flex: 2; min-width: 100px; }
+
+  .notice { font-size: 12px; color: #c8a04a; background: #1e1a0e; border: 1px solid #3a2e10; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; line-height: 1.5; }
+  .section-divider { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #333; text-transform: uppercase; margin: 16px 0 8px; }
+
+  /* meals library */
+  #meals-list .card { margin-bottom: 8px; }
+</style>
+</head>
+<body>
+
+<nav>
+  <button class="active" onclick="showTab('meals',this)">Library</button>
+  <button onclick="showTab('plan',this)">Plan</button>
+  <button onclick="showTab('grocery',this)">Grocery</button>
+  <button onclick="toggleBackupPanel()" style="flex:0;width:40px;">&#9881;</button>
+</nav>
+
+<div id="backup-panel" style="display:none;background:#111;border-bottom:1px solid #222;padding:14px 16px;">
+  <span class="label" style="margin-bottom:10px;">Backup &amp; Restore</span>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <button class="btn primary" onclick="backupData()">&#11015; Save backup</button>
+    <button class="btn" onclick="document.getElementById('restore-input').click()">&#11014; Restore backup</button>
+  </div>
+  <input type="file" id="restore-input" accept=".json" style="display:none" onchange="restoreFromFile(event)">
+  <p style="font-size:11px;color:#444;margin-top:10px;line-height:1.5;">Save backup to iCloud Drive periodically. If you lose your data, restore it here.</p>
+</div>
+
+<main>
+
+  <!-- ── MEALS TAB ── -->
+  <div id="tab-meals" class="tab active">
+    <div class="header-row">
+      <div>
+        <h1>Meal Library</h1>
+        <p class="sub" id="meal-count-sub"></p>
+      </div>
+      <button class="btn primary" onclick="showAddMeal()">+ Add</button>
+    </div>
+
+    <div id="add-meal-form" class="card" style="display:none;padding:14px;margin-bottom:12px;">
+      <span class="label">New meal name</span>
+      <div class="row"><input id="new-meal-name" placeholder="e.g. Sheet Pan Fajitas" onkeydown="if(event.key==='Enter')saveNewMeal()"></div>
+      <div class="row">
+        <button class="btn primary" onclick="saveNewMeal()">Save</button>
+        <button class="btn" onclick="hideAddMeal()">Cancel</button>
+      </div>
+    </div>
+
+    <div id="meals-list"></div>
+  </div>
+
+  <!-- ── PLAN TAB ── -->
+  <div id="tab-plan" class="tab">
+    <h1>Weekly Plan</h1>
+    <p class="sub">Import your plan JSON or assign meals manually</p>
+
+    <!-- Import area -->
+    <div class="import-area">
+      <span class="label">Load plan from JSON</span>
+      <div class="import-btns">
+        <button class="btn primary" onclick="document.getElementById('file-input').click()">📂 Pick file</button>
+        <button class="btn" onclick="togglePasteArea()">📋 Paste JSON</button>
+      </div>
+      <input type="file" id="file-input" accept=".json,application/json" style="display:none" onchange="loadFromFile(event)">
+      <div id="paste-area" style="display:none">
+        <textarea id="paste-json" placeholder='Paste your plan JSON here…'></textarea>
+        <div class="row" style="margin-top:8px;">
+          <button class="btn primary" onclick="loadFromPaste()">Import</button>
+          <button class="btn" onclick="togglePasteArea()">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="unmatched-notice" style="display:none"></div>
+
+    <!-- Imported plan -->
+    <div id="imported-plan" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <span class="section-divider" style="margin:0">Imported plan</span>
+        <button class="btn sm" onclick="clearImport()">Clear</button>
+      </div>
+      <div class="card" id="imported-plan-list"></div>
+    </div>
+
+    <!-- Manual assignment -->
+    <div id="manual-plan-section">
+      <span class="section-divider">Manual assignments</span>
+      <div class="day-grid" id="day-grid"></div>
+      <div id="meal-picker" class="card" style="display:none;margin-bottom:12px;">
+        <div style="padding:12px 14px 8px;">
+          <span class="label" id="picker-label">Pick a meal</span>
+          <input id="picker-search" placeholder="Search meals…" oninput="renderPickerList()">
+        </div>
+        <div class="picker-list" id="picker-list"></div>
+        <div style="padding:8px 14px;">
+          <button class="btn" onclick="closePicker()">Cancel</button>
+        </div>
+      </div>
+      <div class="card" id="plan-display"></div>
+    </div>
+  </div>
+
+  <!-- ── GROCERY TAB ── -->
+  <div id="tab-grocery" class="tab">
+    <h1>Grocery List</h1>
+    <p class="sub" id="grocery-sub"></p>
+
+    <div id="grocery-ingredients" class="grocery-block" style="display:none;">
+      <div id="grocery-ing-label-row" style="display:flex;align-items:center;margin-bottom:6px;"></div>
+      <div id="grocery-ing-list"></div>
+    </div>
+
+    <div id="grocery-empty" class="empty-state" style="display:none;">
+      No meals with ingredients found — import a plan and make sure meals have ingredients in the Library.
+    </div>
+
+    <div class="grocery-block">
+      <span class="label">Extra items</span>
+      <div id="extra-items-list"></div>
+      <div class="row" style="margin-top:8px;">
+        <input id="new-extra" placeholder="Add item…" onkeydown="if(event.key==='Enter')addExtraItem()">
+        <button class="btn primary" onclick="addExtraItem()" style="white-space:nowrap;">Add</button>
+      </div>
+    </div>
+
+    <div class="grocery-block">
+      <span class="label">Export</span>
+      <div class="tab-row">
+        <button class="tab-pill active" onclick="setExportMode('grocery',this)">Grocery only</button>
+        <button class="tab-pill" onclick="setExportMode('notes',this)">Full Notes</button>
+        <button class="tab-pill" onclick="setExportMode('json',this)">JSON DB</button>
+      </div>
+      <div class="export-box" id="export-box"></div>
+      <button class="copy-btn" onclick="copyExport()">📋 Copy to clipboard</button>
+    </div>
+  </div>
+
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────
+const DAYS = ["S","M","T","W","Th","F","Sa"];
+const DAY_NAMES = {S:"Sun",M:"Mon",T:"Tue",W:"Wed",Th:"Thu",F:"Fri",Sa:"Sat"};
+const WEEKDAY_TO_SHORT = {Saturday:"Sa",Sunday:"S",Monday:"M",Tuesday:"T",Wednesday:"W",Thursday:"Th",Friday:"F"};
+const SPECIAL_NAMES = ["Grill Out","Leftovers/Go Out","Leftovers","Go Out"];
+const SPECIAL_OPTS = [{id:"__GRILL__",name:"Grill Out"},{id:"__LEFTOVER__",name:"Leftovers/Go Out"}];
+
+const CATEGORIES = ["Meat & Protein","Produce","Dairy","Dry & Pasta","Canned & Jarred","Sauces & Seasoning","Frozen","Bread & Bakery","Other"];
+const CAT_KEYWORDS = {
+  "Meat & Protein": ["chicken","beef","sausage","pork","turkey","steak","ground","meat","bacon","shrimp","fish","salmon","tuna","ham"],
+  "Produce": ["broccoli","lettuce","tomato","tomatoes","onion","garlic","corn","pepper","spinach","carrot","celery","lemon","lime","avocado","mushroom","zucchini","cucumber","potato"],
+  "Dairy": ["cheese","milk","butter","cream","sour cream","yogurt","parmesan","mozzarella","egg","eggs","half and half"],
+  "Dry & Pasta": ["rice","pasta","noodle","spaghetti","fettuccine","penne","macaroni","flour","bread crumb","oat","quinoa","rice-a-roni"],
+  "Canned & Jarred": ["canned","can ","salsa","beans","tomato sauce","broth","stock","olives","vegetable","soup"],
+  "Sauces & Seasoning": ["sauce","seasoning","dressing","marinade","teriyaki","bbq","cajun","oil","vinegar","soy","mustard","ketchup","ranch","hot sauce","mayo","spice","garlic powder","onion powder","paprika","cumin","alfredo","pasta sauce"],
+  "Frozen": ["frozen","potsticker","dumpling","ice cream","pizza"],
+  "Bread & Bakery": ["bread","tortilla","bun","roll","loaf","pita","wrap","crouton"],
+};
+
+function guessCategory(name) {
+  var n = name.toLowerCase();
+  for (var cat in CAT_KEYWORDS) {
+    var kws = CAT_KEYWORDS[cat];
+    for (var i = 0; i < kws.length; i++) {
+      if (n.indexOf(kws[i]) !== -1) return cat;
+    }
+  }
+  return "Other";
+}
+
+var state = {
+  meals: [
+    {id:"teriyaki-chicken",name:"Teriyaki Chicken, Rice, Broccoli, Potstickers",ingredients:[{name:"chicken breast",qty:2,unit:"lbs",category:"Meat & Protein"},{name:"teriyaki sauce",qty:1,unit:"bottle",category:"Sauces & Seasoning"},{name:"white rice",qty:2,unit:"cups",category:"Dry & Pasta"},{name:"broccoli",qty:1,unit:"head",category:"Produce"},{name:"frozen potstickers",qty:1,unit:"bag",category:"Frozen"}]},
+    {id:"tacos",name:"Tacos",ingredients:[{name:"ground beef",qty:1,unit:"lb",category:"Meat & Protein"},{name:"taco seasoning",qty:1,unit:"packet",category:"Sauces & Seasoning"},{name:"flour tortillas",qty:1,unit:"pack",category:"Bread & Bakery"},{name:"shredded cheese",qty:1,unit:"bag",category:"Dairy"},{name:"sour cream",qty:1,unit:"container",category:"Dairy"},{name:"salsa",qty:1,unit:"jar",category:"Canned & Jarred"},{name:"lettuce",qty:1,unit:"head",category:"Produce"},{name:"tomatoes",qty:2,unit:"whole",category:"Produce"}]},
+    {id:"marinated-chicken",name:"Marinated Chicken, Rice Roni, Canned Veg",ingredients:[{name:"chicken breast",qty:2,unit:"lbs",category:"Meat & Protein"},{name:"Italian dressing",qty:1,unit:"bottle",category:"Sauces & Seasoning"},{name:"Rice-A-Roni",qty:2,unit:"boxes",category:"Dry & Pasta"},{name:"canned vegetables",qty:2,unit:"cans",category:"Canned & Jarred"}]},
+    {id:"spaghetti",name:"Spaghetti",ingredients:[{name:"ground beef",qty:1,unit:"lb",category:"Meat & Protein"},{name:"spaghetti noodles",qty:1,unit:"box",category:"Dry & Pasta"},{name:"pasta sauce",qty:1,unit:"jar",category:"Sauces & Seasoning"},{name:"parmesan cheese",qty:1,unit:"container",category:"Dairy"},{name:"garlic bread",qty:1,unit:"loaf",category:"Bread & Bakery"}]},
+    {id:"cajun-chicken",name:"Cajun Chicken",ingredients:[{name:"chicken breast",qty:2,unit:"lbs",category:"Meat & Protein"},{name:"cajun seasoning",qty:1,unit:"bottle",category:"Sauces & Seasoning"},{name:"butter",qty:1,unit:"stick",category:"Dairy"},{name:"olive oil",qty:1,unit:"bottle",category:"Sauces & Seasoning"}]},
+    {id:"orange-chicken",name:"Orange Chicken, Rice, Broccoli, Potstickers",ingredients:[{name:"frozen orange chicken",qty:1,unit:"bag",category:"Frozen"},{name:"white rice",qty:2,unit:"cups",category:"Dry & Pasta"},{name:"broccoli",qty:1,unit:"head",category:"Produce"},{name:"frozen potstickers",qty:1,unit:"bag",category:"Frozen"}]},
+    {id:"sausage-alfredo",name:"Sausage Alfredo",ingredients:[{name:"Italian sausage",qty:1,unit:"lb",category:"Meat & Protein"},{name:"fettuccine noodles",qty:1,unit:"box",category:"Dry & Pasta"},{name:"alfredo sauce",qty:1,unit:"jar",category:"Sauces & Seasoning"},{name:"parmesan cheese",qty:1,unit:"container",category:"Dairy"},{name:"garlic",qty:3,unit:"cloves",category:"Produce"}]},
+    {id:"bbq-chicken",name:"BBQ Chicken, Rice, Corn on the Cob",ingredients:[{name:"chicken breast",qty:2,unit:"lbs",category:"Meat & Protein"},{name:"BBQ sauce",qty:1,unit:"bottle",category:"Sauces & Seasoning"},{name:"white rice",qty:2,unit:"cups",category:"Dry & Pasta"},{name:"corn on the cob",qty:4,unit:"ears",category:"Produce"}]},
+  ],
+  importedPlan: [],
+  manualPlan: {},
+  extraItems: [],
+  groceryOverrides: {},
+};
+
+var expandedMeal = null;
+var selectedDay = null;
+var exportMode = "grocery";
+var editingKey = null;
+
+// ── Persistence ───────────────────────────────────────────────────────────
+function save() { try { localStorage.setItem("mealdb3", JSON.stringify(state)); } catch(e){} }
+function load() {
+  try {
+    var s = localStorage.getItem("mealdb3");
+    if (s) {
+      var d = JSON.parse(s);
+      // merge so new default meals aren't lost if state keys missing
+      state.meals = d.meals || state.meals;
+      state.importedPlan = d.importedPlan || [];
+      state.manualPlan = d.manualPlan || {};
+      state.extraItems = d.extraItems || [];
+      state.groceryOverrides = d.groceryOverrides || {};
+    }
+  } catch(e){}
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+function h(tag, attrs, inner) {
+  var a = "";
+  for (var k in attrs) { if (attrs[k] !== null && attrs[k] !== undefined) a += " " + k + '="' + attrs[k] + '"'; }
+  return "<" + tag + a + ">" + (inner||"") + "</" + tag + ">";
+}
+
+var toastTimer;
+function showToast(msg) {
+  var t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ t.classList.remove("show"); }, 2500);
+}
+
+// ── Nav ───────────────────────────────────────────────────────────────────
+function showTab(name, btn) {
+  document.querySelectorAll(".tab").forEach(function(t){ t.classList.remove("active"); });
+  document.querySelectorAll("nav button").forEach(function(b){ b.classList.remove("active"); });
+  document.getElementById("tab-"+name).classList.add("active");
+  btn.classList.add("active");
+  if (name === "meals") renderMeals();
+  if (name === "plan") renderPlan();
+  if (name === "grocery") renderGrocery();
+}
+
+// ── Fuzzy match ───────────────────────────────────────────────────────────
+function normalize(s) { return s.toLowerCase().replace(/[^a-z0-9]/g," ").replace(/\s+/g," ").trim(); }
+
+function findMatch(mealName) {
+  var n = normalize(mealName);
+  var m = state.meals.find(function(m){ return normalize(m.name) === n; });
+  if (m) return m.id;
+  m = state.meals.find(function(m){ return n.indexOf(normalize(m.name)) !== -1 || normalize(m.name).indexOf(n) !== -1; });
+  if (m) return m.id;
+  var words = n.split(" ").filter(function(w){ return w.length > 2; });
+  var wordSet = {};
+  words.forEach(function(w){ wordSet[w] = true; });
+  var best = null, bestScore = 0;
+  state.meals.forEach(function(m) {
+    var mw = normalize(m.name).split(" ").filter(function(w){ return w.length > 2; });
+    var overlap = mw.filter(function(w){ return wordSet[w]; }).length;
+    var score = overlap / Math.max(words.length, mw.length);
+    if (score > bestScore && score >= 0.4) { bestScore = score; best = m; }
+  });
+  return best ? best.id : null;
+}
+
+function isSpecial(mealName) {
+  var n = mealName.toLowerCase();
+  return n.indexOf("grill out") !== -1 || n.indexOf("leftover") !== -1 || n.indexOf("go out") !== -1;
+}
+
+// ── Import ────────────────────────────────────────────────────────────────
+function loadFromFile(e) {
+  var file = e.target.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(ev){ parsePlanJSON(ev.target.result); };
+  reader.readAsText(file);
+  e.target.value = "";
+}
+
+function togglePasteArea() {
+  var el = document.getElementById("paste-area");
+  el.style.display = el.style.display === "none" ? "block" : "none";
+  if (el.style.display === "block") setTimeout(function(){ document.getElementById("paste-json").focus(); }, 50);
+}
+
+function loadFromPaste() {
+  var text = document.getElementById("paste-json").value.trim();
+  if (!text) return;
+  parsePlanJSON(text);
+  document.getElementById("paste-json").value = "";
+  document.getElementById("paste-area").style.display = "none";
+}
+
+function parsePlanJSON(text) {
+  var data;
+  try { data = JSON.parse(text); } catch(e) { showToast("Invalid JSON"); return; }
+  var dinners = data.dinner || data.dinners || data.meals || [];
+  if (!Array.isArray(dinners) || dinners.length === 0) { showToast("No dinner entries found"); return; }
+  state.importedPlan = dinners.map(function(entry) {
+    var mealName = entry.meal || entry.name || "";
+    var special = isSpecial(mealName);
+    var matchedId = special ? null : findMatch(mealName);
+    return { date: entry.date || "", weekday: entry.weekday || "", meal: mealName, matchedId: matchedId, special: special };
+  });
+  save(); renderPlan();
+  var unmatched = state.importedPlan.filter(function(e){ return !e.special && !e.matchedId; });
+  showToast(unmatched.length ? ("Imported — " + unmatched.length + " meal(s) not in library") : "Plan imported — all meals matched");
+}
+
+function clearImport() { state.importedPlan = []; save(); renderPlan(); }
+
+// ── Plan Tab ──────────────────────────────────────────────────────────────
+function renderPlan() {
+  var hasPlan = state.importedPlan.length > 0;
+  document.getElementById("imported-plan").style.display = hasPlan ? "block" : "none";
+
+  if (hasPlan) {
+    var unmatched = state.importedPlan.filter(function(e){ return !e.special && !e.matchedId; });
+    var noticeEl = document.getElementById("unmatched-notice");
+    if (unmatched.length) {
+      noticeEl.style.display = "block";
+      var names = unmatched.map(function(e){ return e.meal; }).join(", ");
+      noticeEl.innerHTML = '<div class="notice">&#9888;&#65039; ' + unmatched.length + ' meal(s) not found in your library — add them in the Library tab.<br><small style="opacity:.7">' + esc(names) + '</small></div>';
+    } else {
+      noticeEl.style.display = "none";
+    }
+
+    var rows = state.importedPlan.map(function(entry) {
+      var dayShort = WEEKDAY_TO_SHORT[entry.weekday] || entry.weekday.slice(0,2);
+      var mealClass = "plan-meal" + (entry.special ? " special" : (!entry.matchedId ? " unmatched" : ""));
+      var libMeal = entry.matchedId ? state.meals.find(function(m){ return m.id === entry.matchedId; }) : null;
+      var ingCount = libMeal ? libMeal.ingredients.length : 0;
+      var badge = "";
+      if (!entry.special && entry.matchedId) badge = '<span class="badge">' + ingCount + ' ing</span>';
+      if (!entry.special && !entry.matchedId) badge = '<span class="badge warn">no match</span>';
+      return '<div class="plan-row"><span class="plan-day">' + esc(dayShort) + '&#8212;</span><span class="' + mealClass + '">' + esc(entry.meal) + '</span>' + badge + '</div>';
+    }).join("");
+    document.getElementById("imported-plan-list").innerHTML = rows;
+  } else {
+    document.getElementById("unmatched-notice").style.display = "none";
+  }
+  renderManualPlan();
+}
+
+function renderManualPlan() {
+  var gridHtml = DAYS.map(function(d) {
+    var active = selectedDay === d ? " active" : "";
+    return '<button class="day-btn' + active + '" onclick="selectDay(\'' + d + '\')">' + d + '</button>';
+  }).join("");
+  document.getElementById("day-grid").innerHTML = gridHtml;
+
+  var planHtml = DAYS.map(function(d) {
+    var id = state.manualPlan[d];
+    var name = id ? getManualMealName(id) : null;
+    var clearBtn = id ? '<button class="icon-btn" style="margin-left:auto" onclick="clearManualDay(\'' + d + '\')">&#x2715;</button>' : "";
+    return '<div class="plan-row"><span class="plan-day">' + d + '&#8212;</span><span class="plan-meal' + (name ? "" : " special") + '">' + (name ? esc(name) : "not set") + '</span>' + clearBtn + '</div>';
+  }).join("");
+  document.getElementById("plan-display").innerHTML = planHtml;
+}
+
+function getManualMealName(id) {
+  if (id === "__GRILL__") return "Grill Out";
+  if (id === "__LEFTOVER__") return "Leftovers/Go Out";
+  var m = state.meals.find(function(m){ return m.id === id; });
+  return m ? m.name : id;
+}
+
+function selectDay(d) {
+  selectedDay = selectedDay === d ? null : d;
+  var picker = document.getElementById("meal-picker");
+  if (selectedDay) {
+    document.getElementById("picker-label").textContent = "Assign meal for " + (DAY_NAMES[d] || d);
+    document.getElementById("picker-search").value = "";
+    picker.style.display = "block";
+    renderPickerList();
+    setTimeout(function(){ document.getElementById("picker-search").focus(); }, 50);
+  } else {
+    picker.style.display = "none";
+  }
+  renderManualPlan();
+}
+
+function renderPickerList() {
+  var q = document.getElementById("picker-search").value.toLowerCase();
+  var all = SPECIAL_OPTS.concat(state.meals);
+  var filtered = all.filter(function(m){ return m.name.toLowerCase().indexOf(q) !== -1; });
+  if (!filtered.length) {
+    document.getElementById("picker-list").innerHTML = '<div class="empty-state" style="padding:16px">No matches</div>';
+    return;
+  }
+  document.getElementById("picker-list").innerHTML = filtered.map(function(m) {
+    return '<div class="picker-item" onclick="assignManual(\'' + m.id + '\')">' + esc(m.name) + '</div>';
+  }).join("");
+}
+
+function assignManual(mealId) {
+  if (!selectedDay) return;
+  state.manualPlan[selectedDay] = mealId;
+  closePicker(); save(); renderManualPlan();
+}
+
+function closePicker() {
+  selectedDay = null;
+  document.getElementById("meal-picker").style.display = "none";
+  renderManualPlan();
+}
+
+function clearManualDay(d) { delete state.manualPlan[d]; save(); renderManualPlan(); }
+
+// ── Meals Tab ─────────────────────────────────────────────────────────────
+function renderMeals() {
+  document.getElementById("meal-count-sub").textContent = state.meals.length + " meals \u00b7 tap to manage ingredients";
+  var list = document.getElementById("meals-list");
+  if (!state.meals.length) { list.innerHTML = '<div class="empty-state">No meals yet.</div>'; return; }
+  list.innerHTML = state.meals.map(function(meal) {
+    var open = expandedMeal === meal.id;
+    var head = '<div class="card-head" onclick="toggleMeal(\'' + meal.id + '\')">' +
+      '<span class="card-title">' + esc(meal.name) + '</span>' +
+      '<span class="badge">' + meal.ingredients.length + ' ing</span>' +
+      '<button class="icon-btn red" onclick="event.stopPropagation();deleteMeal(\'' + meal.id + '\')">&#x2715;</button>' +
+      '</div>';
+    var body = "";
+    if (open) {
+      var ingRows = meal.ingredients.length === 0
+        ? '<div class="empty-state" style="padding:16px 0">No ingredients yet.</div>'
+        : meal.ingredients.map(function(ing, idx) { return buildIngRow(meal.id, ing, idx); }).join("");
+      var addRow = '<div style="margin-top:12px;">' +
+        '<span class="label">Add ingredient</span>' +
+        '<div class="ing-add-row">' +
+        '<input class="name" placeholder="Name" id="ing-name-' + meal.id + '" onkeydown="if(event.key===\'Enter\')addIngredient(\'' + meal.id + '\')">' +
+        '<input class="sm" placeholder="Qty" type="number" id="ing-qty-' + meal.id + '">' +
+        '<input class="md" placeholder="Unit" id="ing-unit-' + meal.id + '" onkeydown="if(event.key===\'Enter\')addIngredient(\'' + meal.id + '\')">' +
+        '<button class="btn primary" onclick="addIngredient(\'' + meal.id + '\')">Add</button>' +
+        '</div></div>';
+      body = '<div class="card-body">' + ingRows + addRow + '</div>';
+    }
+    return '<div class="card">' + head + body + '</div>';
+  }).join("");
+}
+
+function buildIngRow(mealId, ing, idx) {
+  var cat = ing.category || guessCategory(ing.name);
+  var opts = CATEGORIES.map(function(c) {
+    return '<option value="' + esc(c) + '"' + (cat === c ? ' selected' : '') + '>' + esc(c) + '</option>';
+  }).join("");
+  return '<div class="ing-row" style="flex-wrap:wrap;gap:4px;">' +
+    '<span class="ing-name">' + esc(ing.name) + '</span>' +
+    '<select onchange="setIngCategory(\'' + mealId + '\',' + idx + ',this.value)" style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:6px;color:#555;font-size:11px;padding:2px 6px;width:auto;outline:none;">' + opts + '</select>' +
+    '<button class="icon-btn red" onclick="deleteIngredient(\'' + mealId + '\',' + idx + ')">&#x2715;</button>' +
+    '</div>';
+}
+
+function toggleMeal(id) { expandedMeal = expandedMeal === id ? null : id; renderMeals(); }
+
+function deleteMeal(id) {
+  if (!confirm("Delete this meal?")) return;
+  state.meals = state.meals.filter(function(m){ return m.id !== id; });
+  if (expandedMeal === id) expandedMeal = null;
+  save(); renderMeals();
+}
+
+function addIngredient(mealId) {
+  var name = document.getElementById("ing-name-"+mealId);
+  var qty = document.getElementById("ing-qty-"+mealId);
+  var unit = document.getElementById("ing-unit-"+mealId);
+  if (!name || !name.value.trim()) return;
+  var n = name.value.trim(), q = parseFloat(qty.value) || 1, u = unit.value.trim();
+  var meal = state.meals.find(function(m){ return m.id === mealId; });
+  if (meal) meal.ingredients.push({name:n, qty:q, unit:u, category:guessCategory(n)});
+  save(); renderMeals();
+  setTimeout(function(){ var el = document.getElementById("ing-name-"+mealId); if(el) el.focus(); }, 50);
+}
+
+function deleteIngredient(mealId, idx) {
+  var meal = state.meals.find(function(m){ return m.id === mealId; });
+  if (meal) { meal.ingredients.splice(idx,1); save(); renderMeals(); }
+}
+
+function setIngCategory(mealId, idx, category) {
+  var meal = state.meals.find(function(m){ return m.id === mealId; });
+  if (meal && meal.ingredients[idx]) { meal.ingredients[idx].category = category; save(); }
+}
+
+function showAddMeal() {
+  document.getElementById("add-meal-form").style.display = "block";
+  setTimeout(function(){ document.getElementById("new-meal-name").focus(); }, 50);
+}
+function hideAddMeal() {
+  document.getElementById("add-meal-form").style.display = "none";
+  document.getElementById("new-meal-name").value = "";
+}
+function saveNewMeal() {
+  var name = document.getElementById("new-meal-name").value.trim();
+  if (!name) return;
+  var id = "meal-" + Date.now();
+  state.meals.push({id:id, name:name, ingredients:[]});
+  expandedMeal = id;
+  save(); hideAddMeal(); renderMeals();
+}
+
+// ── Grocery Tab ───────────────────────────────────────────────────────────
+function aggregateIngredients() {
+  var map = {};
+  state.importedPlan.forEach(function(entry) {
+    if (entry.special || !entry.matchedId) return;
+    var meal = state.meals.find(function(m){ return m.id === entry.matchedId; });
+    if (!meal) return;
+    meal.ingredients.forEach(function(ing) {
+      var key = ing.name.toLowerCase();
+      if (!map[key]) map[key] = {name:ing.name, qty:0, unit:ing.unit, category:ing.category||null};
+      map[key].qty += ing.qty;
+    });
+  });
+  Object.values(state.manualPlan).forEach(function(id) {
+    if (id === "__GRILL__" || id === "__LEFTOVER__") return;
+    var meal = state.meals.find(function(m){ return m.id === id; });
+    if (!meal) return;
+    meal.ingredients.forEach(function(ing) {
+      var key = ing.name.toLowerCase();
+      if (!map[key]) map[key] = {name:ing.name, qty:0, unit:ing.unit, category:ing.category||null};
+      map[key].qty += ing.qty;
+    });
+  });
+  return Object.values(map).map(function(i) {
+    return Object.assign({}, i, {category: i.category || guessCategory(i.name)});
+  }).sort(function(a,b) {
+    var ai = CATEGORIES.indexOf(a.category), bi = CATEGORIES.indexOf(b.category);
+    var diff = (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    return diff !== 0 ? diff : a.name.localeCompare(b.name);
+  });
+}
+
+function applyOverrides(agg) {
+  var overrides = state.groceryOverrides || {};
+  return agg.map(function(i) {
+    var key = i.name.toLowerCase();
+    if (key in overrides) {
+      if (overrides[key] === null) return null;
+      return Object.assign({}, i, overrides[key]);
+    }
+    return i;
+  }).filter(Boolean);
+}
+
+function setOverride(key, data) {
+  if (!state.groceryOverrides) state.groceryOverrides = {};
+  state.groceryOverrides[key] = data;
+  save(); renderGrocery();
+}
+
+function clearOverrides() { state.groceryOverrides = {}; save(); renderGrocery(); }
+
+function renderGrocery() {
+  var rawAgg = aggregateIngredients();
+  var agg = applyOverrides(rawAgg);
+  var importedCount = state.importedPlan.filter(function(e){ return !e.special && e.matchedId; }).length;
+  var manualCount = Object.values(state.manualPlan).filter(function(id){ return id !== "__GRILL__" && id !== "__LEFTOVER__"; }).length;
+  var total = importedCount + manualCount;
+  var hasOverrides = Object.keys(state.groceryOverrides || {}).length > 0;
+
+  document.getElementById("grocery-sub").textContent = total
+    ? ("From " + total + " planned meal" + (total !== 1 ? "s" : ""))
+    : "No meals planned yet";
+
+  var ingBlock = document.getElementById("grocery-ingredients");
+  var emptyEl = document.getElementById("grocery-empty");
+
+  if (agg.length || rawAgg.length) {
+    ingBlock.style.display = "block"; emptyEl.style.display = "none";
+    var resetBtn = hasOverrides ? '<button class="btn sm" style="margin-left:auto" onclick="clearOverrides()">Reset edits</button>' : "";
+    document.getElementById("grocery-ing-label-row").innerHTML = '<span class="label" style="margin:0">Ingredients needed</span>' + resetBtn;
+    document.getElementById("grocery-ing-list").innerHTML = agg.map(function(i) {
+      return buildGroceryRow(i);
+    }).join("");
+  } else {
+    ingBlock.style.display = "none"; emptyEl.style.display = "block";
+  }
+  renderExtraItems();
+  renderExport();
+}
+
+function buildGroceryRow(i) {
+  var key = i.name.toLowerCase();
+  var safeKey = key.replace(/[^a-z0-9]/g,"_");
+  if (editingKey === key) {
+    return '<div class="grocery-item editing">' +
+      '<input id="edit-name-' + safeKey + '" value="' + esc(i.name) + '" style="flex:2;min-width:120px;" onkeydown="if(event.key===\'Enter\')saveItemEdit(\'' + key + '\')">' +
+      '<input id="edit-qty-' + safeKey + '" value="' + i.qty + '" type="number" style="width:64px;">' +
+      '<button class="btn primary sm" onclick="saveItemEdit(\'' + key + '\')">Save</button>' +
+      '<button class="btn sm" onclick="cancelEdit()">Cancel</button>' +
+      '</div>';
+  }
+  var qtyBadge = i.qty > 1 ? '<span class="grocery-item-qty">(' + i.qty + ')</span>' : "";
+  return '<div class="grocery-item">' +
+    '<div class="grocery-item-body" onclick="startEdit(\'' + key + '\')">' +
+    '<span class="grocery-item-name">' + esc(i.name) + '</span>' + qtyBadge +
+    '</div>' +
+    '<div class="grocery-item-del" onclick="setOverride(\'' + key + '\', null)">&#x2715;</div>' +
+    '</div>';
+}
+
+function startEdit(key) { editingKey = key; renderGrocery(); }
+function cancelEdit() { editingKey = null; renderGrocery(); }
+function saveItemEdit(key) {
+  var safeKey = key.replace(/[^a-z0-9]/g,"_");
+  var nameEl = document.getElementById("edit-name-"+safeKey);
+  var qtyEl = document.getElementById("edit-qty-"+safeKey);
+  var name = nameEl ? nameEl.value.trim() : "";
+  var qty = parseFloat(qtyEl ? qtyEl.value : 1) || 1;
+  if (!name) return;
+  editingKey = null;
+  setOverride(key, {name:name, qty:qty});
+}
+
+function renderExtraItems() {
+  document.getElementById("extra-items-list").innerHTML = state.extraItems.map(function(item, i) {
+    return '<div class="grocery-item">' +
+      '<div class="grocery-item-body" style="cursor:default;"><span class="grocery-item-name">' + esc(item) + '</span></div>' +
+      '<div class="grocery-item-del" onclick="deleteExtra(' + i + ')">&#x2715;</div>' +
+      '</div>';
+  }).join("");
+}
+
+function addExtraItem() {
+  var inp = document.getElementById("new-extra");
+  var val = inp.value.trim(); if (!val) return;
+  state.extraItems.push(val); inp.value = "";
+  save(); renderExtraItems(); renderExport();
+}
+
+function deleteExtra(i) { state.extraItems.splice(i,1); save(); renderExtraItems(); renderExport(); }
+
+function setExportMode(mode, btn) {
+  exportMode = mode;
+  document.querySelectorAll(".tab-pill").forEach(function(b){ b.classList.remove("active"); });
+  btn.classList.add("active");
+  renderExport();
+}
+
+function renderExport() { document.getElementById("export-box").textContent = buildExport(); }
+
+function buildExport() {
+  var agg = applyOverrides(aggregateIngredients());
+  var today = new Date().toLocaleDateString("en-US",{month:"2-digit",day:"2-digit",year:"numeric"});
+
+  if (exportMode === "grocery") {
+    var lines = agg.map(function(i){ return i.qty > 1 ? i.name + " (" + i.qty + ")" : i.name; });
+    if (state.extraItems.length) { lines.push(""); state.extraItems.forEach(function(e){ lines.push(e); }); }
+    return lines.join("\n");
+  }
+
+  if (exportMode === "notes") {
+    var dinnerLines = state.importedPlan.map(function(e) {
+      var short = WEEKDAY_TO_SHORT[e.weekday] || e.weekday.slice(0,2);
+      return short + "- " + e.meal;
+    });
+    DAYS.forEach(function(d) {
+      var id = state.manualPlan[d];
+      if (id) dinnerLines.push(d + "- " + getManualMealName(id));
+    });
+    var ingLines = agg.map(function(i){ return "- " + i.name + (i.qty > 1 ? " (" + i.qty + ")" : ""); });
+    var out = ["Week of: " + today, "", "DINNER"].concat(dinnerLines).concat(["", "GROCERIES"]).concat(ingLines);
+    if (state.extraItems.length) { out.push(""); out.push("OTHER"); state.extraItems.forEach(function(e){ out.push("- "+e); }); }
+    return out.join("\n");
+  }
+
+  return JSON.stringify({version:1, meals:state.meals}, null, 2);
+}
+
+function copyExport() {
+  var text = buildExport();
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(function(){ showToast("Copied!"); }).catch(function(){ fallbackCopy(text); });
+  } else { fallbackCopy(text); }
+}
+function fallbackCopy(text) {
+  var ta = document.createElement("textarea");
+  ta.value = text; ta.style.cssText = "position:fixed;opacity:0";
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); showToast("Copied!"); } catch(e){ showToast("Copy failed"); }
+  document.body.removeChild(ta);
+}
+
+// ── Backup / Restore ──────────────────────────────────────────────────────
+function backupData() {
+  var payload = JSON.stringify({
+    _backup: true,
+    _date: new Date().toISOString(),
+    meals: state.meals,
+    importedPlan: state.importedPlan,
+    manualPlan: state.manualPlan,
+    extraItems: state.extraItems,
+    groceryOverrides: state.groceryOverrides,
+  }, null, 2);
+  var blob = new Blob([payload], {type: "application/json"});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  var dateStr = new Date().toLocaleDateString("en-US",{month:"2-digit",day:"2-digit",year:"numeric"}).replace(/\//g,"-");
+  a.href = url;
+  a.download = "meal-db-backup-" + dateStr + ".json";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+  showToast("Backup saved!");
+}
+
+function restoreFromFile(e) {
+  var file = e.target.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      var d = JSON.parse(ev.target.result);
+      if (!d._backup) { showToast("Not a backup file"); return; }
+      if (!confirm("This will replace all your current data. Continue?")) return;
+      if (d.meals) state.meals = d.meals;
+      if (d.importedPlan) state.importedPlan = d.importedPlan;
+      if (d.manualPlan) state.manualPlan = d.manualPlan;
+      if (d.extraItems) state.extraItems = d.extraItems;
+      if (d.groceryOverrides) state.groceryOverrides = d.groceryOverrides;
+      save(); renderMeals(); renderPlan();
+      showToast("Restored!");
+    } catch(err) { showToast("Invalid backup file"); }
+  };
+  reader.readAsText(file);
+  e.target.value = "";
+}
+
+function toggleBackupPanel() {
+  var el = document.getElementById("backup-panel");
+  el.style.display = el.style.display === "none" ? "block" : "none";
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+load();
+renderMeals();
+renderPlan();
+</script>
+</body>
+</html>
