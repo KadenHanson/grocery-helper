@@ -58,7 +58,7 @@ export default function App() {
         />
       )}
 
-      {/* Tabs */}
+      {/* Tabs at top */}
       <main style={{ padding:16, maxWidth:600, margin:"0 auto" }}>
         {tab === "meals" && (
           <MealsTab
