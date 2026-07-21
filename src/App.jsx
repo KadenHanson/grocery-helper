@@ -26,7 +26,7 @@ export default function App() {
 
   return (
     <div style={{ fontFamily:"-apple-system, system-ui, sans-serif", background:"#0a0a0a", minHeight:"100vh", color:"#e8e8e8" }}>
-      {/* Nav */}
+      {/* Nav panel */}
       <nav style={{ display:"flex", gap:2, padding:"12px 16px", background:"#111", borderBottom:"1px solid #222", position:"sticky", top:0, zIndex:10 }}>
         {navBtn("meals", "Library")}
         {navBtn("plan", "Plan")}
