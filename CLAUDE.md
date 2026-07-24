@@ -14,11 +14,15 @@ npm run deploy    # build + publish dist/ to GitHub Pages (gh-pages branch)
 
 There is **no test framework** in the project. Merge logic has been verified with throwaway Node ESM scripts (import `src/merge.js` directly, since it has no React/DOM dependencies) rather than a committed test suite.
 
-Cloud sync requires two env vars (Vite inlines them at build time):
-- `VITE_JSONBIN_API_KEY` — JSONBin master key
-- `VITE_JSONBIN_BIN_ID`
+Cloud sync talks to a Deno Deploy backend (`server/main.ts`). The client needs:
+- `VITE_SYNC_URL` — the backend URL, inlined at build time. **Not secret.**
+- a **shared write secret**, entered once per device in the app (Settings → Cloud
+  sync) and kept in `localStorage`. It is deliberately **never** in the bundle or
+  an env var — the site is public, so inlining it would recreate the exposed-key
+  problem. See `server/README.md` for backend setup.
 
-Without them, `storage.js` silently no-ops the cloud calls and the app runs local-only.
+Without a URL *and* a secret, `cloudConfigured()` is false and `storage.js` no-ops
+the cloud calls — the app runs local-only.
 
 ## Architecture
 
@@ -56,13 +60,17 @@ The grocery list is computed, never persisted. `aggregateIngredients(state)` (in
 - `findMatch(mealName, meals)` (in `useStore.js`) — fuzzy-matches a free-text imported dinner to a library meal (exact → substring → word-overlap ≥ 0.4).
 - `isSpecial()` — detects "grill out"/"leftover"/"go out" entries that shouldn't contribute ingredients.
 
-### Cloud sync & concurrency (`storage.js` + `merge.js`)
+### Cloud sync & concurrency (`server/main.ts` + `storage.js` + `merge.js`)
 
-This is the subtle part. **JSONBin has no compare-and-swap** (no ETag/If-Match), and the write key is inlined into the public bundle. Concurrency safety is therefore entirely app-side, implemented as per-entity **last-writer-wins with tombstones** in `src/merge.js`:
+This is the subtle part, and it works at two layers.
 
-- Each entity carries an `updatedAt` in `_meta`; deletions leave a tombstone in `_meta.del`. Merging two documents keeps, per key, whichever side changed most recently; a tombstone newer than a value keeps the item deleted. Tombstones GC after 30 days.
-- **Ties resolve to cloud (side B).** This is deliberate — it preserves "cloud is source of truth on load" for legacy docs whose timestamps are all 0, so migrating an un-stamped bin never clobbers real cloud data with local defaults.
+**Server layer — compare-and-swap (Phase 1).** `server/main.ts` (Deno Deploy) fronts a Deno KV store. `GET /data` returns `{version, data}` (version = KV versionstamp); `PUT /data` does an atomic `kv.atomic().check({versionstamp})` and returns **409 + the current doc** if the version is stale. This closes the read→PUT race and hides all storage credentials behind a `SYNC_SECRET` bearer token. (Replaced the old JSONBin bin, which had no CAS and shipped its key in the bundle.)
+
+**Client layer — per-entity last-writer-wins with tombstones** in `src/merge.js`, still needed because CAS only serializes writes; it doesn't merge two people's concurrent edits:
+
+- Each entity carries an `updatedAt` in `_meta`; deletions leave a tombstone in `_meta.del`. Merging keeps, per key, whichever side changed most recently; a tombstone newer than a value keeps the item deleted. Tombstones GC after 30 days.
+- **Ties resolve to cloud (side B).** Deliberate — preserves "cloud is source of truth on load" for legacy docs whose timestamps are all 0.
 - Entity keying: `meals`/`extraItems` by `id`; `manualPlan`/`groceryOverrides` by their own object keys; `importedPlan` as a single versioned blob.
-- `useStore` routes **all** cloud interaction through one `mergeSync({push})` path (read cloud → merge with freshest local via `stateRef` → adopt → push if we contributed). It runs on debounced write, on mount, on window focus/`visibilitychange` (pull-on-focus so a stale tab re-syncs before writing), and behind the manual Push/Pull buttons.
+- `useStore` routes **all** cloud interaction through one `mergeSync({push})` path: read cloud → merge with freshest local via `stateRef` → adopt → **CAS-push** with the read version, and on a 409 conflict loop (re-merge against the server's returned doc and retry, bounded to 4 attempts). It runs on debounced write, mount, window focus/`visibilitychange` (pull-on-focus), and the manual Push/Pull buttons. All of this is gated by `cloudConfigured()` (URL + secret present) — otherwise the app is local-only.
 
-A small read→PUT race window between tabs remains and cannot be closed on JSONBin. The real fix (a serverless shim that hides the key and adds CAS) is **Phase 1, intentionally deferred** — and adding new writers (iOS Shortcuts) or a public read endpoint is blocked on it. See the `sync-safety-phases` project memory for the full plan and rationale.
+**Still deferred:** iOS Shortcuts as a 3rd writer and a public (unauthenticated) read endpoint. Both are now *unblocked* by Phase 1 but not yet built. See the `sync-safety-phases` project memory.

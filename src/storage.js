@@ -1,45 +1,71 @@
-// JSONBin.io storage
-// Set your credentials in .env:
-//   VITE_JSONBIN_API_KEY=your_key
-//   VITE_JSONBIN_BIN_ID=your_bin_id
+// Cloud storage via the grocery-helper sync backend (Deno Deploy + Deno KV).
 //
-// NOTE (Phase 1): VITE_JSONBIN_API_KEY is inlined into the public bundle, so
-// anyone can read/write the bin. JSONBin also has no compare-and-swap, so the
-// merge in useStore.js leaves a small read->PUT race window between tabs. Both
-// are only fully fixed by putting a serverless shim in front of the bin.
+// The backend holds all storage credentials and enforces compare-and-swap, so
+// the browser only needs two things:
+//   - VITE_SYNC_URL   the backend URL, baked in at build time. NOT secret.
+//   - a shared secret, entered once per device and kept in localStorage.
+//     NEVER put this in the bundle or an env var: this site is public, and
+//     inlining it would recreate the exact exposed-key problem we're fixing.
+//
+// Contract:
+//   loadFromCloud()            -> { state, version } | null
+//                                 null = not configured or backend unreachable.
+//                                 state may be null when the backend is empty.
+//   saveToCloud(state, version)-> { ok, conflict? }
+//                                 conflict = { state, version } on a 409 (someone
+//                                 else wrote first) so the caller can re-merge.
 
-const API_KEY = import.meta.env.VITE_JSONBIN_API_KEY;
-const BIN_ID = import.meta.env.VITE_JSONBIN_BIN_ID;
-const BASE = "https://api.jsonbin.io/v3/b";
+const SYNC_URL = import.meta.env.VITE_SYNC_URL;
+const SECRET_KEY = "gh_sync_secret";
+
+export function getSecret() {
+  try { return localStorage.getItem(SECRET_KEY) || ""; } catch { return ""; }
+}
+
+export function setSecret(v) {
+  try {
+    if (v) localStorage.setItem(SECRET_KEY, v);
+    else localStorage.removeItem(SECRET_KEY);
+  } catch {}
+}
+
+// Cloud sync only runs when we have both a backend URL and a secret to auth with.
+export function cloudConfigured() {
+  return Boolean(SYNC_URL && getSecret());
+}
+
+function authHeaders() {
+  return { "Authorization": `Bearer ${getSecret()}`, "Content-Type": "application/json" };
+}
 
 export async function loadFromCloud() {
-  if (!API_KEY || !BIN_ID) return null;
+  if (!cloudConfigured()) return null;
   try {
-    const res = await fetch(`${BASE}/${BIN_ID}/latest`, {
-      headers: { "X-Master-Key": API_KEY }
-    });
+    const res = await fetch(`${SYNC_URL}/data`, { headers: authHeaders() });
     if (!res.ok) return null;
-    const data = await res.json();
-    return data.record || null;
+    const { version, data } = await res.json();
+    return { state: data ?? null, version: version ?? null };
   } catch {
     return null;
   }
 }
 
-export async function saveToCloud(state) {
-  if (!API_KEY || !BIN_ID) return false;
+export async function saveToCloud(state, version) {
+  if (!cloudConfigured()) return { ok: false };
   try {
-    const res = await fetch(`${BASE}/${BIN_ID}`, {
+    const res = await fetch(`${SYNC_URL}/data`, {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Master-Key": API_KEY,
-      },
-      body: JSON.stringify(state),
+      headers: authHeaders(),
+      body: JSON.stringify({ version: version ?? null, data: state }),
     });
-    return res.ok;
+    if (res.ok) return { ok: true };
+    if (res.status === 409) {
+      const { version: v, data } = await res.json();
+      return { ok: false, conflict: { state: data ?? null, version: v ?? null } };
+    }
+    return { ok: false };
   } catch {
-    return false;
+    return { ok: false };
   }
 }
 

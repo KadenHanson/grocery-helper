@@ -27,8 +27,8 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_JSONBIN_API_KEY: ${{ secrets.VITE_JSONBIN_API_KEY }}
-          VITE_JSONBIN_BIN_ID: ${{ secrets.VITE_JSONBIN_BIN_ID }}
+          # The backend URL is not secret; a repo *variable* is fine (a secret works too).
+          VITE_SYNC_URL: ${{ vars.VITE_SYNC_URL }}
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v4

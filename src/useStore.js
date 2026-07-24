@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { DEFAULT_MEALS, guessCategory, normalize, isSpecial, CATEGORIES } from "./constants";
-import { loadFromCloud, saveToCloud, loadFromLocal, saveToLocal } from "./storage";
+import { loadFromCloud, saveToCloud, loadFromLocal, saveToLocal, cloudConfigured } from "./storage";
 import { normalizeMeta, stampMeta, mergeStates, genId } from "./merge";
 
 const DEFAULT_STATE = {
@@ -39,21 +39,35 @@ export function useStore() {
   }
 
   // Read cloud, merge it with the freshest local state, adopt the result, and
-  // push back if we changed anything the cloud didn't already have. This is the
-  // one code path for every cloud interaction (write, mount, focus, buttons).
+  // push back (with compare-and-swap) if we changed anything the cloud didn't
+  // already have. This is the one code path for every cloud interaction (write,
+  // mount, focus, buttons).
+  //
+  // The write is a CAS against the versionstamp we just read: if another writer
+  // slipped in between our read and our PUT, the backend replies 409 with the
+  // current doc, and we loop — re-merge against it and retry. That closes the
+  // read->PUT race the old JSONBin path couldn't.
   const mergeSync = useCallback(async ({ push }) => {
-    const local = stateRef.current;
-    const cloud = await loadFromCloud();
-    if (!cloud) {
-      // Nothing remote yet — first-ever sync just uploads local.
-      return push ? await saveToCloud(local) : true;
+    if (!cloudConfigured()) return true; // local-only mode: nothing to sync
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const remote = await loadFromCloud();
+      if (!remote) return false; // backend unreachable
+      const local = stateRef.current;
+      const remoteState = remote.state ? normalizeMeta(remote.state) : null;
+      const merged = remoteState ? mergeStates(local, remoteState) : local;
+      stateRef.current = merged;
+      setState(merged);
+      saveToLocal(merged);
+      // Upload if asked to, or if our merge produced something the cloud lacks
+      // (including the first-ever write, when the backend is still empty).
+      const contributed = !remoteState || JSON.stringify(merged) !== JSON.stringify(remoteState);
+      if (!(push || contributed)) return true;
+      const res = await saveToCloud(merged, remote.version);
+      if (res.ok) return true;
+      if (res.conflict) continue; // someone wrote first; loop re-reads & re-merges
+      return false; // non-conflict error
     }
-    const merged = mergeStates(local, normalizeMeta(cloud));
-    stateRef.current = merged;
-    setState(merged);
-    saveToLocal(merged);
-    const contributed = JSON.stringify(merged) !== JSON.stringify(normalizeMeta(cloud));
-    return push || contributed ? await saveToCloud(merged) : true;
+    return false; // exhausted retries — treat as a failed sync
   }, []);
 
   // Local write is immediate; cloud write is debounced and merges on the way up.
@@ -85,6 +99,7 @@ export function useStore() {
       stateRef.current = m;
       setState(m);
     }
+    if (!cloudConfigured()) return; // local-only until a secret is entered
     (async () => {
       setSyncStatus("saving");
       const ok = await mergeSync({ push: true });
@@ -97,6 +112,7 @@ export function useStore() {
   useEffect(() => {
     const onFocus = () => {
       if (document.visibilityState === "hidden" || syncing.current) return;
+      if (!cloudConfigured()) return;
       syncing.current = true;
       setSyncStatus("saving");
       mergeSync({ push: false })
@@ -201,12 +217,14 @@ export function useStore() {
 
   // ── Manual sync ───────────────────────────────────────────────────────────
   async function syncNow() {
+    if (!cloudConfigured()) return flashStatus(false);
     setSyncStatus("saving");
     const ok = await mergeSync({ push: true });
     flashStatus(ok);
   }
 
   async function pullNow() {
+    if (!cloudConfigured()) return flashStatus(false);
     setSyncStatus("saving");
     const ok = await mergeSync({ push: false });
     flashStatus(ok);

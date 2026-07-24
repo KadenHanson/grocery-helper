@@ -1,8 +1,18 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Btn } from "./UI";
+import { getSecret, setSecret } from "../storage";
 
 export default function BackupPanel({ state, restoreBackup, syncNow, pullNow, syncStatus, onClose }) {
   const fileRef = useRef();
+  const [secret, setSecretInput] = useState(getSecret());
+  const [secretMsg, setSecretMsg] = useState("");
+
+  function saveSecret() {
+    setSecret(secret.trim());
+    setSecretMsg(secret.trim() ? "Secret saved — pulling latest…" : "Secret cleared");
+    setTimeout(() => setSecretMsg(""), 2500);
+    if (secret.trim()) pullNow(); // now authenticated — grab the shared data
+  }
 
   function handleBackup() {
     const payload = JSON.stringify({ _backup: true, _date: new Date().toISOString(), ...state }, null, 2);
@@ -48,12 +58,23 @@ export default function BackupPanel({ state, restoreBackup, syncNow, pullNow, sy
       </div>
 
       <span style={{ fontSize:11, fontWeight:700, letterSpacing:"0.06em", color:"#333", textTransform:"uppercase", display:"block", marginBottom:6 }}>Cloud sync</span>
+      <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center", marginBottom:8 }}>
+        <input
+          type="password"
+          value={secret}
+          onChange={e => setSecretInput(e.target.value)}
+          placeholder="Shared secret"
+          style={{ flex:"1 1 160px", minWidth:0, padding:"7px 10px", borderRadius:8, border:"1px solid #333", background:"#0a0a0a", color:"#e8e8e8", fontSize:13, fontFamily:"inherit" }}
+        />
+        <Btn variant="primary" onClick={saveSecret}>Save secret</Btn>
+      </div>
+      {secretMsg && <p style={{ fontSize:11, color:"#4a9", marginTop:0, marginBottom:8 }}>{secretMsg}</p>}
       <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
         <Btn onClick={syncNow}>↑ Push changes</Btn>
         <Btn onClick={pullNow}>↓ Pull latest</Btn>
         {syncLabel && <span style={{ fontSize:12, color:syncColor }}>{syncLabel}</span>}
       </div>
-      <p style={{ fontSize:11, color:"#333", marginTop:8, lineHeight:1.5 }}>Push sends your data to the cloud. Pull loads the latest from the cloud (useful if your wife made changes).</p>
+      <p style={{ fontSize:11, color:"#333", marginTop:8, lineHeight:1.5 }}>Enter the shared secret once on each device to enable sync — it's stored only on this device, never in the app. Push sends your data to the cloud; Pull loads the latest (useful if your wife made changes).</p>
     </div>
   );
 }
