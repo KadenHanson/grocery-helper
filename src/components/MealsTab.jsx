@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { CATEGORIES, guessCategory, priceKey } from "../constants";
-import { Card, Btn, Input, Label, Badge, EmptyState } from "./UI";
+import { Card, Btn, Input, Label, Badge, EmptyState, QtyTag } from "./UI";
 
-export default function MealsTab({ meals, addMeal, deleteMeal, addIngredient, deleteIngredient, setIngCategory, prices, setPrice }) {
+export default function MealsTab({ meals, addMeal, deleteMeal, addIngredient, deleteIngredient, setIngCategory, prices, setPrice, qtyTypes, setQtyType }) {
   const [expanded, setExpanded] = useState(null);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -10,6 +10,9 @@ export default function MealsTab({ meals, addMeal, deleteMeal, addIngredient, de
 
   const priceMap = prices || {};
   const priceOf = (name) => priceMap[priceKey(name)];
+  const qtyMap = qtyTypes || {};
+  const qtyTypeOf = (name) => qtyMap[priceKey(name)] === "meal" ? "meal" : "ind";
+  const toggleQtyType = (name) => setQtyType(name, qtyTypeOf(name) === "meal" ? "ind" : "meal");
   const mealCost = (m) => (m.ingredients || []).reduce((s, ing) => s + (priceOf(ing.name) || 0) * (ing.qty || 1), 0);
   const costed = meals.map(mealCost).filter(c => c > 0);
   const avgCost = costed.length ? costed.reduce((a, b) => a + b, 0) / costed.length : 0;
@@ -94,6 +97,7 @@ export default function MealsTab({ meals, addMeal, deleteMeal, addIngredient, de
                 {meal.ingredients.map((ing, idx) => (
                   <div key={idx} style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:4, padding:"7px 0", borderBottom:"1px solid var(--border-soft)" }}>
                     <span style={{ flex:1, fontSize:13, color:"var(--text-2)", minWidth:100 }}>{ing.name}</span>
+                    <QtyTag qty={ing.qty} type={qtyTypeOf(ing.name)} onToggle={() => toggleQtyType(ing.name)} />
                     <select value={ing.category || guessCategory(ing.name)}
                       onChange={e => setIngCategory(meal.id, idx, e.target.value)}
                       style={{ background:"var(--input-bg)", border:"1px solid var(--border)", borderRadius:6, color:"var(--faint)", fontSize:11, padding:"2px 6px", outline:"none" }}>

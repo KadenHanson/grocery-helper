@@ -12,6 +12,7 @@ const DEFAULT_STATE = {
   checkedItems: {},
   prices: {},
   stores: {},
+  qtyTypes: {},
 };
 
 // Normalize a saved doc into current shape: fill defaults, migrate legacy
@@ -25,6 +26,7 @@ function mergeState(saved) {
     checkedItems: rest.checkedItems || {},
     prices: rest.prices || {},
     stores: rest.stores || {},
+    qtyTypes: rest.qtyTypes || {},
   };
   s.extraItems = (s.extraItems || []).map(e =>
     typeof e === "string" ? { id: genId("x"), name: e } : e
@@ -236,6 +238,17 @@ export function useStore() {
     });
   }
 
+  // Quantity qualifier per item name: "meal" (meals-worth) vs default individual.
+  // Display-only (cost stays price × qty); helps read what the number means.
+  function setQtyType(name, type) {
+    const key = priceKey(name);
+    update(s => {
+      const next = { ...s.qtyTypes };
+      if (!key || type !== "meal") delete next[key]; else next[key] = "meal";
+      return { ...s, qtyTypes: next };
+    });
+  }
+
   // Remembered store assignment, keyed by lowercased item name (like prices).
   // Empty value clears it (item falls back to "Unassigned").
   function setStore(name, store) {
@@ -280,7 +293,7 @@ export function useStore() {
     addMeal, deleteMeal, addIngredient, deleteIngredient, setIngCategory,
     importPlan, clearImport, setManualDay, clearManualDay,
     addExtraItem, deleteExtra, setOverride, clearOverrides,
-    toggleChecked, clearChecked, setPrice, setStore,
+    toggleChecked, clearChecked, setPrice, setStore, setQtyType,
     restoreBackup, syncNow, pullNow,
   };
 }

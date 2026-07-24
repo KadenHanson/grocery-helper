@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { DAYS, WEEKDAY_TO_SHORT, CATEGORIES, STORES, guessStore, priceKey, TAX_RATE } from "../constants";
 import { aggregateIngredients, applyOverrides } from "../useStore";
-import { Btn, BtnSm, Input, Label, Block, EmptyState } from "./UI";
+import { Btn, BtnSm, Input, Label, Block, EmptyState, QtyTag } from "./UI";
 
-export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverride, clearOverrides, toggleChecked, clearChecked, setPrice, setStore }) {
-  const { importedPlan, manualPlan, extraItems, groceryOverrides, meals, checkedItems, prices, stores } = state;
+export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverride, clearOverrides, toggleChecked, clearChecked, setPrice, setStore, setQtyType }) {
+  const { importedPlan, manualPlan, extraItems, groceryOverrides, meals, checkedItems, prices, stores, qtyTypes } = state;
   const [view, setView] = useState("manage"); // manage | shop
   const [exportMode, setExportMode] = useState("grocery");
   const [newExtra, setNewExtra] = useState("");
@@ -25,6 +25,10 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
   // Effective store: explicit assignment, else a fuzzy guess (meat/milk→Costco,
   // most else→Walmart). Used for both the Shop grouping and the Manage picker.
   const storeOf = (name) => storeRaw(name) || guessStore(name);
+  // Quantity qualifier (display-only): "meal" (meals-worth) vs "ind" (individual).
+  const qtyMap = qtyTypes || {};
+  const qtyTypeOf = (name) => qtyMap[priceKey(name)] === "meal" ? "meal" : "ind";
+  const toggleQtyType = (name) => setQtyType(name, qtyTypeOf(name) === "meal" ? "ind" : "meal");
 
   // Unified item list used by both views (ingredients + extras).
   const items = [
@@ -167,8 +171,10 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
         style={{ display: "flex", alignItems: "center", gap: 4, borderBottom: "1px solid var(--border-soft)", cursor: "pointer" }}>
         <div style={bigCheckStyle(on)}>{on ? "☑" : "☐"}</div>
         <span style={{ flex: 1, fontSize: 15, textDecoration: on ? "line-through" : "none", color: on ? "var(--faint)" : "var(--text)" }}>
-          {it.name}{it.qty > 1 ? ` ×${it.qty}` : ""}
+          {it.name}
         </span>
+        <QtyTag qty={it.qty} type={qtyTypeOf(it.name)} />
+        {" "}
         {lt > 0 && <span style={{ fontSize: 13, color: on ? "var(--ghost)" : "var(--muted)", paddingRight: 4 }}>${lt.toFixed(2)}</span>}
       </div>
     );
@@ -231,7 +237,7 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
                   <div key={key} style={itemStyle}>
                     <div style={itemBodyStyle} onClick={() => startEdit(i)}>
                       <span style={{ flex: 1 }}>{i.name}</span>
-                      {i.qty > 1 && <span style={{ color: "var(--faint)", fontSize: 12 }}>({i.qty})</span>}
+                      <QtyTag qty={i.qty} type={qtyTypeOf(i.name)} onToggle={() => toggleQtyType(i.name)} />
                     </div>
                     {storeCell(i.name)}
                     {priceCell(i.name)}
@@ -249,7 +255,10 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
             <Label>Extra items</Label>
             {extraItems.map((item, i) => (
               <div key={item.id} style={{ ...itemStyle, marginBottom: i === extraItems.length - 1 ? 8 : 0 }}>
-                <div style={{ ...itemBodyStyle, cursor: "default" }}><span style={{ flex: 1 }}>{item.name}</span></div>
+                <div style={{ ...itemBodyStyle, cursor: "default" }}>
+                  <span style={{ flex: 1 }}>{item.name}</span>
+                  <QtyTag qty={1} type={qtyTypeOf(item.name)} onToggle={() => toggleQtyType(item.name)} />
+                </div>
                 {storeCell(item.name)}
                 {priceCell(item.name)}
                 <div style={itemDelStyle} onClick={() => deleteExtra(item.id)}>✕</div>

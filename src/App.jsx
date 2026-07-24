@@ -84,6 +84,8 @@ export default function App() {
             setIngCategory={store.setIngCategory}
             prices={store.state.prices}
             setPrice={store.setPrice}
+            qtyTypes={store.state.qtyTypes}
+            setQtyType={store.setQtyType}
           />
         )}
         {tab === "plan" && (
@@ -106,6 +108,7 @@ export default function App() {
             clearChecked={store.clearChecked}
             setPrice={store.setPrice}
             setStore={store.setStore}
+            setQtyType={store.setQtyType}
           />
         )}
       </main>
