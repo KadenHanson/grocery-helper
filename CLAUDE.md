@@ -19,14 +19,14 @@ Cloud sync talks to a Deno Deploy backend (`server/main.ts`). The client needs:
 - a **shared write secret**, entered once per device in the app (Settings → Cloud
   sync) and kept in `localStorage`. It is deliberately **never** in the bundle or
   an env var — the site is public, so inlining it would recreate the exposed-key
-  problem. See `server/README.md` for backend setup.
+  problem. See `worker/README.md` for backend setup.
 
 Without a URL *and* a secret, `cloudConfigured()` is false and `storage.js` no-ops
 the cloud calls — the app runs local-only.
 
 ## Architecture
 
-A single-page React 19 app (Vite, plain JS — no TypeScript, no router). It plans a week of dinners, aggregates the ingredients into a categorized grocery list, and syncs to a JSONBin cloud bin so two people (the author and spouse) can share one dataset. Deployed static to GitHub Pages.
+A single-page React 19 app (Vite, plain JS — no TypeScript, no router). It plans a week of dinners, aggregates the ingredients into a categorized grocery list, and syncs through a Cloudflare Worker backend so two people (the author and spouse) can share one dataset. Deployed static to GitHub Pages.
 
 ### State lives entirely in one hook
 
@@ -60,11 +60,11 @@ The grocery list is computed, never persisted. `aggregateIngredients(state)` (in
 - `findMatch(mealName, meals)` (in `useStore.js`) — fuzzy-matches a free-text imported dinner to a library meal (exact → substring → word-overlap ≥ 0.4).
 - `isSpecial()` — detects "grill out"/"leftover"/"go out" entries that shouldn't contribute ingredients.
 
-### Cloud sync & concurrency (`server/main.ts` + `storage.js` + `merge.js`)
+### Cloud sync & concurrency (`worker/worker.js` + `storage.js` + `merge.js`)
 
 This is the subtle part, and it works at two layers.
 
-**Server layer — compare-and-swap (Phase 1).** `server/main.ts` (Deno Deploy) fronts a Deno KV store. `GET /data` returns `{version, data}` (version = KV versionstamp); `PUT /data` does an atomic `kv.atomic().check({versionstamp})` and returns **409 + the current doc** if the version is stale. This closes the read→PUT race and hides all storage credentials behind a `SYNC_SECRET` bearer token. (Replaced the old JSONBin bin, which had no CAS and shipped its key in the bundle.)
+**Server layer — compare-and-swap (Phase 1).** `worker/worker.js` (Cloudflare Worker) fronts a D1 (SQLite) one-row store. `GET /data` returns `{version, data}` (version = a stringified integer); `PUT /data` does `UPDATE state SET version=version+1, data=? WHERE id=1 AND version=?` and, if no row changed, returns **409 + the current doc**. This closes the read→PUT race and hides all storage credentials behind a `SYNC_SECRET` bearer token. Deploy with `npx wrangler deploy --config worker/wrangler.toml`. (Replaced the old JSONBin bin, which had no CAS and shipped its key in the bundle; and a short-lived Deno Deploy attempt, abandoned because its new-org `*.deno.net` TLS cert flapped on every redeploy — see the `sync-safety-phases` memory. The dead `server/*` Deno files were removed.)
 
 **Client layer — per-entity last-writer-wins with tombstones** in `src/merge.js`, still needed because CAS only serializes writes; it doesn't merge two people's concurrent edits:
 
