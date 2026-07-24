@@ -7,4 +7,4 @@ compatibility_date = "2026-07-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "grocery-helper"
-database_id = "REPLACE_WITH_ID_FROM_wrangler_d1_create"
+database_id = "7586175d-5134-4e99-b593-d024b9746f3f"
