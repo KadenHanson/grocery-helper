@@ -60,16 +60,23 @@ export default function App() {
         </div>
       )}
 
-      {/* Settings panel */}
+      {/* Settings panel — fixed overlay so it floats over content instead of
+          pushing the page down. */}
       {showSettings && (
-        <BackupPanel
-          state={store.state}
-          restoreBackup={store.restoreBackup}
-          syncNow={store.syncNow}
-          pullNow={store.pullNow}
-          syncStatus={store.syncStatus}
-          onClose={() => setShowSettings(false)}
-        />
+        <>
+          <div onClick={() => setShowSettings(false)}
+            style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:20 }} />
+          <div style={{ position:"fixed", top:0, left:0, right:0, zIndex:21, maxWidth:600, margin:"0 auto", maxHeight:"100vh", overflowY:"auto", boxShadow:"0 10px 30px rgba(0,0,0,0.5)" }}>
+            <BackupPanel
+              state={store.state}
+              restoreBackup={store.restoreBackup}
+              syncNow={store.syncNow}
+              pullNow={store.pullNow}
+              syncStatus={store.syncStatus}
+              onClose={() => setShowSettings(false)}
+            />
+          </div>
+        </>
       )}
 
       {/* Tabs at top */}
@@ -82,6 +89,7 @@ export default function App() {
             addIngredient={store.addIngredient}
             deleteIngredient={store.deleteIngredient}
             setIngCategory={store.setIngCategory}
+            setIngredientQty={store.setIngredientQty}
             prices={store.state.prices}
             setPrice={store.setPrice}
             qtyTypes={store.state.qtyTypes}

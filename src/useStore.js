@@ -176,6 +176,17 @@ export function useStore() {
     }));
   }
 
+  function setIngredientQty(mealId, idx, qty) {
+    const q = parseFloat(qty) || 1;
+    update(s => ({
+      ...s,
+      meals: s.meals.map(m => m.id !== mealId ? m : {
+        ...m,
+        ingredients: m.ingredients.map((ing, i) => i !== idx ? ing : { ...ing, qty: q })
+      })
+    }));
+  }
+
   // ── Plan ─────────────────────────────────────────────────────────────────
   function importPlan(dinners) {
     const imported = dinners.map(entry => {
@@ -290,7 +301,7 @@ export function useStore() {
 
   return {
     state, syncStatus,
-    addMeal, deleteMeal, addIngredient, deleteIngredient, setIngCategory,
+    addMeal, deleteMeal, addIngredient, deleteIngredient, setIngCategory, setIngredientQty,
     importPlan, clearImport, setManualDay, clearManualDay,
     addExtraItem, deleteExtra, setOverride, clearOverrides,
     toggleChecked, clearChecked, setPrice, setStore, setQtyType,

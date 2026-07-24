@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { CATEGORIES, guessCategory, priceKey } from "../constants";
-import { Card, Btn, Input, Label, Badge, EmptyState, QtyTag } from "./UI";
+import { Card, Btn, Input, Label, Badge, EmptyState, TypeLabel } from "./UI";
 
-export default function MealsTab({ meals, addMeal, deleteMeal, addIngredient, deleteIngredient, setIngCategory, prices, setPrice, qtyTypes, setQtyType }) {
+export default function MealsTab({ meals, addMeal, deleteMeal, addIngredient, deleteIngredient, setIngCategory, setIngredientQty, prices, setPrice, qtyTypes, setQtyType }) {
   const [expanded, setExpanded] = useState(null);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -95,17 +95,26 @@ export default function MealsTab({ meals, addMeal, deleteMeal, addIngredient, de
                 {meal.ingredients.length === 0 && <EmptyState style={{ padding:"16px 0" }}>No ingredients yet.</EmptyState>}
 
                 {meal.ingredients.map((ing, idx) => (
-                  <div key={idx} style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:4, padding:"7px 0", borderBottom:"1px solid var(--border-soft)" }}>
-                    <span style={{ flex:1, fontSize:13, color:"var(--text-2)", minWidth:100 }}>{ing.name}</span>
-                    <QtyTag qty={ing.qty} type={qtyTypeOf(ing.name)} onToggle={() => toggleQtyType(ing.name)} />
-                    <select value={ing.category || guessCategory(ing.name)}
-                      onChange={e => setIngCategory(meal.id, idx, e.target.value)}
-                      style={{ background:"var(--input-bg)", border:"1px solid var(--border)", borderRadius:6, color:"var(--faint)", fontSize:11, padding:"2px 6px", outline:"none" }}>
-                      {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                    {priceCell(ing.name)}
-                    <button onClick={() => deleteIngredient(meal.id, idx)}
-                      style={{ background:"none", border:"none", cursor:"pointer", color:"var(--danger)", fontSize:16, padding:"2px 4px" }}>✕</button>
+                  <div key={idx} style={{ padding:"8px 0", borderBottom:"1px solid var(--border-soft)" }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <span style={{ flex:1, fontSize:13, color:"var(--text-2)", minWidth:60 }}>{ing.name}</span>
+                      <input type="number" inputMode="decimal" min="0" step="1"
+                        defaultValue={ing.qty} key={"q:" + meal.id + ":" + idx + ":" + ing.qty}
+                        onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                        onBlur={e => { const v = parseFloat(e.target.value) || 1; if (v !== ing.qty) setIngredientQty(meal.id, idx, v); }}
+                        style={{ width:42, background:"var(--input-bg)", border:"1px solid var(--border)", borderRadius:6, color:"var(--text-2)", fontSize:12, padding:"3px 4px", outline:"none", textAlign:"center" }} />
+                      <TypeLabel type={qtyTypeOf(ing.name)} onToggle={() => toggleQtyType(ing.name)} />
+                      {priceCell(ing.name)}
+                      <button onClick={() => deleteIngredient(meal.id, idx)}
+                        style={{ background:"none", border:"none", cursor:"pointer", color:"var(--danger)", fontSize:16, padding:"2px 4px" }}>✕</button>
+                    </div>
+                    <div style={{ display:"flex", justifyContent:"flex-end", marginTop:4 }}>
+                      <select value={ing.category || guessCategory(ing.name)}
+                        onChange={e => setIngCategory(meal.id, idx, e.target.value)}
+                        style={{ background:"var(--input-bg)", border:"1px solid var(--border)", borderRadius:6, color:"var(--faint)", fontSize:11, padding:"2px 6px", outline:"none" }}>
+                        {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
                   </div>
                 ))}
 
