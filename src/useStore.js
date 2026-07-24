@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { DEFAULT_MEALS, guessCategory, normalize, isSpecial, CATEGORIES } from "./constants";
 import { loadFromCloud, saveToCloud, loadFromLocal, saveToLocal } from "./storage";
+import { normalizeMeta, stampMeta, mergeStates, genId } from "./merge";
 
 const DEFAULT_STATE = {
   meals: DEFAULT_MEALS,
@@ -10,48 +11,105 @@ const DEFAULT_STATE = {
   groceryOverrides: {},
 };
 
+// Normalize a saved doc into current shape: fill defaults, migrate legacy
+// extraItems (string[] -> {id,name}[]), drop backup wrapper keys, ensure _meta.
 function mergeState(saved) {
-  return {
+  const { _backup, _date, ...rest } = saved || {};
+  const s = {
     ...DEFAULT_STATE,
-    ...saved,
-    groceryOverrides: saved.groceryOverrides || {},
+    ...rest,
+    groceryOverrides: rest.groceryOverrides || {},
   };
+  s.extraItems = (s.extraItems || []).map(e =>
+    typeof e === "string" ? { id: genId("x"), name: e } : e
+  );
+  return normalizeMeta(s);
 }
 
 export function useStore() {
-  const [state, setState] = useState(DEFAULT_STATE);
+  const [state, setState] = useState(() => normalizeMeta(DEFAULT_STATE));
   const [syncStatus, setSyncStatus] = useState("idle"); // idle | saving | saved | error
   const saveTimer = useRef(null);
+  const stateRef = useRef(state); // freshest state for async merges
+  const syncing = useRef(false);  // guards overlapping focus pulls
 
-  // Load on mount — local first, then cloud
-  useEffect(() => {
-    const local = loadFromLocal();
-    if (local) setState(mergeState(local));
+  function flashStatus(ok, ms = 2000) {
+    setSyncStatus(ok ? "saved" : "error");
+    setTimeout(() => setSyncStatus("idle"), ms);
+  }
 
-    loadFromCloud().then(cloud => {
-      if (cloud) setState(mergeState(cloud));
-    });
+  // Read cloud, merge it with the freshest local state, adopt the result, and
+  // push back if we changed anything the cloud didn't already have. This is the
+  // one code path for every cloud interaction (write, mount, focus, buttons).
+  const mergeSync = useCallback(async ({ push }) => {
+    const local = stateRef.current;
+    const cloud = await loadFromCloud();
+    if (!cloud) {
+      // Nothing remote yet — first-ever sync just uploads local.
+      return push ? await saveToCloud(local) : true;
+    }
+    const merged = mergeStates(local, normalizeMeta(cloud));
+    stateRef.current = merged;
+    setState(merged);
+    saveToLocal(merged);
+    const contributed = JSON.stringify(merged) !== JSON.stringify(normalizeMeta(cloud));
+    return push || contributed ? await saveToCloud(merged) : true;
   }, []);
 
-  // Debounced save whenever state changes
+  // Local write is immediate; cloud write is debounced and merges on the way up.
   const save = useCallback((newState) => {
+    stateRef.current = newState;
     saveToLocal(newState);
     clearTimeout(saveTimer.current);
     setSyncStatus("saving");
     saveTimer.current = setTimeout(async () => {
-      const ok = await saveToCloud(newState);
-      setSyncStatus(ok ? "saved" : "error");
-      setTimeout(() => setSyncStatus("idle"), 2000);
+      const ok = await mergeSync({ push: true });
+      flashStatus(ok);
     }, 1000);
-  }, []);
+  }, [mergeSync]);
 
   const update = useCallback((updater) => {
     setState(prev => {
-      const next = typeof updater === "function" ? updater(prev) : { ...prev, ...updater };
+      const draft = typeof updater === "function" ? updater(prev) : { ...prev, ...updater };
+      const next = { ...draft, _meta: stampMeta(prev, draft) };
       save(next);
       return next;
     });
   }, [save]);
+
+  // Load on mount — local first, then merge in cloud.
+  useEffect(() => {
+    const local = loadFromLocal();
+    if (local) {
+      const m = mergeState(local);
+      stateRef.current = m;
+      setState(m);
+    }
+    (async () => {
+      setSyncStatus("saving");
+      const ok = await mergeSync({ push: true });
+      flashStatus(ok, 1500);
+    })();
+  }, [mergeSync]);
+
+  // Pull-on-focus: a tab left open goes stale, so re-merge with the cloud when
+  // it becomes visible again before it's allowed to write over anyone.
+  useEffect(() => {
+    const onFocus = () => {
+      if (document.visibilityState === "hidden" || syncing.current) return;
+      syncing.current = true;
+      setSyncStatus("saving");
+      mergeSync({ push: false })
+        .then(ok => flashStatus(ok, 1500))
+        .finally(() => { syncing.current = false; });
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [mergeSync]);
 
   // ── Meal library ─────────────────────────────────────────────────────────
   function addMeal(name) {
@@ -121,8 +179,8 @@ export function useStore() {
   }
 
   // ── Grocery ───────────────────────────────────────────────────────────────
-  function addExtraItem(val) { update(s => ({ ...s, extraItems: [...s.extraItems, val] })); }
-  function deleteExtra(i) { update(s => ({ ...s, extraItems: s.extraItems.filter((_, j) => j !== i) })); }
+  function addExtraItem(val) { update(s => ({ ...s, extraItems: [...s.extraItems, { id: genId("x"), name: val }] })); }
+  function deleteExtra(id) { update(s => ({ ...s, extraItems: s.extraItems.filter(e => e.id !== id) })); }
 
   function setOverride(key, data) {
     update(s => ({ ...s, groceryOverrides: { ...s.groceryOverrides, [key]: data } }));
@@ -130,32 +188,28 @@ export function useStore() {
   function clearOverrides() { update(s => ({ ...s, groceryOverrides: {} })); }
 
   // ── Backup / Restore ──────────────────────────────────────────────────────
+  // A restore is authoritative: stamp changes AND tombstone anything the backup
+  // dropped, so the restored data wins the subsequent merge instead of being
+  // re-merged with stale cloud entries.
   function restoreBackup(data) {
-    const next = mergeState(data);
-    setState(next);
+    const backup = mergeState(data);
+    const prev = stateRef.current;
+    const next = { ...backup, _meta: stampMeta(prev, backup) };
     save(next);
+    setState(next);
   }
 
   // ── Manual sync ───────────────────────────────────────────────────────────
   async function syncNow() {
     setSyncStatus("saving");
-    const ok = await saveToCloud(state);
-    setSyncStatus(ok ? "saved" : "error");
-    setTimeout(() => setSyncStatus("idle"), 2000);
+    const ok = await mergeSync({ push: true });
+    flashStatus(ok);
   }
 
   async function pullNow() {
     setSyncStatus("saving");
-    const cloud = await loadFromCloud();
-    if (cloud) {
-      const next = mergeState(cloud);
-      setState(next);
-      saveToLocal(next);
-      setSyncStatus("saved");
-    } else {
-      setSyncStatus("error");
-    }
-    setTimeout(() => setSyncStatus("idle"), 2000);
+    const ok = await mergeSync({ push: false });
+    flashStatus(ok);
   }
 
   return {

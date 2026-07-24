@@ -52,7 +52,7 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
   function buildExport() {
     if (exportMode === "grocery") {
       const lines = agg.map(i => i.qty > 1 ? `${i.name} (${i.qty})` : i.name);
-      if (extraItems.length) { lines.push(""); extraItems.forEach(e => lines.push(e)); }
+      if (extraItems.length) { lines.push(""); extraItems.forEach(e => lines.push(e.name)); }
       return lines.join("\n");
     }
     if (exportMode === "notes") {
@@ -67,7 +67,7 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
       });
       const ingLines = agg.map(i => `- ${i.name}${i.qty > 1 ? ` (${i.qty})` : ""}`);
       const out = [`Week of: ${today}`, "", "DINNER", ...dinnerLines, "", "GROCERIES", ...ingLines];
-      if (extraItems.length) { out.push(""); out.push("OTHER"); extraItems.forEach(e => out.push(`- ${e}`)); }
+      if (extraItems.length) { out.push(""); out.push("OTHER"); extraItems.forEach(e => out.push(`- ${e.name}`)); }
       return out.join("\n");
     }
     return JSON.stringify({ version:1, meals: state.meals }, null, 2);
@@ -137,9 +137,9 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
       <Block>
         <Label>Extra items</Label>
         {extraItems.map((item, i) => (
-          <div key={i} style={{ ...itemStyle, marginBottom: i === extraItems.length - 1 ? 8 : 0 }}>
-            <div style={{ ...itemBodyStyle, cursor:"default" }}><span style={{ flex:1 }}>{item}</span></div>
-            <div style={itemDelStyle} onClick={() => deleteExtra(i)}>✕</div>
+          <div key={item.id} style={{ ...itemStyle, marginBottom: i === extraItems.length - 1 ? 8 : 0 }}>
+            <div style={{ ...itemBodyStyle, cursor:"default" }}><span style={{ flex:1 }}>{item.name}</span></div>
+            <div style={itemDelStyle} onClick={() => deleteExtra(item.id)}>✕</div>
           </div>
         ))}
         <div style={{ display:"flex", gap:8, marginTop:8 }}>

@@ -2,6 +2,11 @@
 // Set your credentials in .env:
 //   VITE_JSONBIN_API_KEY=your_key
 //   VITE_JSONBIN_BIN_ID=your_bin_id
+//
+// NOTE (Phase 1): VITE_JSONBIN_API_KEY is inlined into the public bundle, so
+// anyone can read/write the bin. JSONBin also has no compare-and-swap, so the
+// merge in useStore.js leaves a small read->PUT race window between tabs. Both
+// are only fully fixed by putting a serverless shim in front of the bin.
 
 const API_KEY = import.meta.env.VITE_JSONBIN_API_KEY;
 const BIN_ID = import.meta.env.VITE_JSONBIN_BIN_ID;
