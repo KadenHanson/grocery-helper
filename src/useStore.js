@@ -11,6 +11,7 @@ const DEFAULT_STATE = {
   groceryOverrides: {},
   checkedItems: {},
   prices: {},
+  stores: {},
 };
 
 // Normalize a saved doc into current shape: fill defaults, migrate legacy
@@ -23,6 +24,7 @@ function mergeState(saved) {
     groceryOverrides: rest.groceryOverrides || {},
     checkedItems: rest.checkedItems || {},
     prices: rest.prices || {},
+    stores: rest.stores || {},
   };
   s.extraItems = (s.extraItems || []).map(e =>
     typeof e === "string" ? { id: genId("x"), name: e } : e
@@ -234,6 +236,18 @@ export function useStore() {
     });
   }
 
+  // Remembered store assignment, keyed by lowercased item name (like prices).
+  // Empty value clears it (item falls back to "Unassigned").
+  function setStore(name, store) {
+    const key = name.trim().toLowerCase();
+    update(s => {
+      const next = { ...s.stores };
+      if (!key || !store) delete next[key];
+      else next[key] = store;
+      return { ...s, stores: next };
+    });
+  }
+
   // ── Backup / Restore ──────────────────────────────────────────────────────
   // A restore is authoritative: stamp changes AND tombstone anything the backup
   // dropped, so the restored data wins the subsequent merge instead of being
@@ -266,7 +280,7 @@ export function useStore() {
     addMeal, deleteMeal, addIngredient, deleteIngredient, setIngCategory,
     importPlan, clearImport, setManualDay, clearManualDay,
     addExtraItem, deleteExtra, setOverride, clearOverrides,
-    toggleChecked, clearChecked, setPrice,
+    toggleChecked, clearChecked, setPrice, setStore,
     restoreBackup, syncNow, pullNow,
   };
 }

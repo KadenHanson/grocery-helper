@@ -89,6 +89,7 @@ export default function App() {
             toggleChecked={store.toggleChecked}
             clearChecked={store.clearChecked}
             setPrice={store.setPrice}
+            setStore={store.setStore}
           />
         )}
       </main>

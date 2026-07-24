@@ -40,7 +40,7 @@ All mutations funnel through `update(updater)`, which:
 ### The state shape
 
 ```
-{ meals, importedPlan, manualPlan, extraItems, groceryOverrides, checkedItems, prices, _meta }
+{ meals, importedPlan, manualPlan, extraItems, groceryOverrides, checkedItems, prices, stores, _meta }
 ```
 - `meals` — the library: `[{id, name, ingredients:[{name, qty, unit, category}]}]`
 - `importedPlan` — a pasted/parsed week (bulk-replaced, no per-row identity)
@@ -49,9 +49,12 @@ All mutations funnel through `update(updater)`, which:
 - `groceryOverrides` — `{ingredientKey: patch | null}`; `null` means "remove this line from the list"
 - `checkedItems` — `{key: true}` shopping-checklist state; keys prefixed `i:`<lowercased ingredient name> or `x:`<extra id>. Unchecking deletes the key (tombstone).
 - `prices` — `{lowercased item name: number}` remembered unit prices (keyed by name so they carry across weeks); drives the estimated-total readout.
+- `stores` — `{lowercased item name: storeName}` remembered store assignment (from `STORES` in constants.js); groups the Shop view. Unset = "Unassigned".
 - `_meta` — sync bookkeeping (see below); strip `_backup`/`_date` wrapper keys when importing a backup
 
-All of `meals`/`extraItems`/`manualPlan`/`groceryOverrides`/`checkedItems`/`prices` are the merge-tracked collections (the `KEYED` list in `merge.js`) — adding a new synced map means registering it there too.
+All of `meals`/`extraItems`/`manualPlan`/`groceryOverrides`/`checkedItems`/`prices`/`stores` are the merge-tracked collections (the `KEYED` list in `merge.js`) — adding a new synced map means registering it there too.
+
+`GroceryTab.jsx` has two sub-views (local `view` state): **Manage** (edit items, set price + store, add extras, export) and **Shop** (big-checkbox checklist grouped by store → category, with per-store and overall totals + progress).
 
 ### Derived data (not stored)
 

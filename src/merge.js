@@ -16,7 +16,7 @@
 
 export const TOMBSTONE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
 
-const KEYED = ["meals", "extraItems", "manualPlan", "groceryOverrides", "checkedItems", "prices"];
+const KEYED = ["meals", "extraItems", "manualPlan", "groceryOverrides", "checkedItems", "prices", "stores"];
 
 function now() { return Date.now(); }
 
@@ -29,9 +29,9 @@ const byId = (arr) => Object.fromEntries((arr || []).map((o) => [o.id, o]));
 export function emptyMeta() {
   return {
     v: 1,
-    meals: {}, extraItems: {}, manualPlan: {}, groceryOverrides: {}, checkedItems: {}, prices: {},
+    meals: {}, extraItems: {}, manualPlan: {}, groceryOverrides: {}, checkedItems: {}, prices: {}, stores: {},
     importedPlan: 0,
-    del: { meals: {}, extraItems: {}, manualPlan: {}, groceryOverrides: {}, checkedItems: {}, prices: {} },
+    del: { meals: {}, extraItems: {}, manualPlan: {}, groceryOverrides: {}, checkedItems: {}, prices: {}, stores: {} },
   };
 }
 
@@ -82,6 +82,7 @@ export function stampMeta(prev, next) {
   stampMap(prev.groceryOverrides || {}, next.groceryOverrides || {}, meta.groceryOverrides, meta.del.groceryOverrides, t);
   stampMap(prev.checkedItems || {}, next.checkedItems || {}, meta.checkedItems, meta.del.checkedItems, t);
   stampMap(prev.prices || {}, next.prices || {}, meta.prices, meta.del.prices, t);
+  stampMap(prev.stores || {}, next.stores || {}, meta.stores, meta.del.stores, t);
   if (JSON.stringify(prev.importedPlan || []) !== JSON.stringify(next.importedPlan || []))
     meta.importedPlan = t;
   return meta;
@@ -144,6 +145,7 @@ export function mergeStates(local, cloud) {
   out.groceryOverrides = mergeMap(local.groceryOverrides || {}, a.groceryOverrides, a.del.groceryOverrides, cloud.groceryOverrides || {}, b.groceryOverrides, b.del.groceryOverrides, meta.groceryOverrides, meta.del.groceryOverrides);
   out.checkedItems = mergeMap(local.checkedItems || {}, a.checkedItems, a.del.checkedItems, cloud.checkedItems || {}, b.checkedItems, b.del.checkedItems, meta.checkedItems, meta.del.checkedItems);
   out.prices = mergeMap(local.prices || {}, a.prices, a.del.prices, cloud.prices || {}, b.prices, b.del.prices, meta.prices, meta.del.prices);
+  out.stores = mergeMap(local.stores || {}, a.stores, a.del.stores, cloud.stores || {}, b.stores, b.del.stores, meta.stores, meta.del.stores);
 
   const ipA = a.importedPlan, ipB = b.importedPlan;
   out.importedPlan = (ipA > ipB ? local.importedPlan : cloud.importedPlan) || [];

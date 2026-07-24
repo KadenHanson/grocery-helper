@@ -8,6 +8,9 @@ export const CATEGORIES = [
   "Canned & Jarred","Sauces & Seasoning","Frozen","Bread & Bakery","Other"
 ];
 
+// Stores you can assign items to (remembered per item). "Unassigned" is implicit.
+export const STORES = ["Walmart", "Sam's Club", "Costco"];
+
 export const CAT_KEYWORDS = {
   "Meat & Protein": ["chicken","beef","sausage","pork","turkey","steak","ground","meat","bacon","shrimp","fish","salmon","tuna","ham"],
   "Produce": ["broccoli","lettuce","tomato","tomatoes","onion","garlic","corn","pepper","spinach","carrot","celery","lemon","lime","avocado","mushroom","zucchini","cucumber","potato"],
