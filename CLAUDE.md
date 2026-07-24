@@ -40,14 +40,18 @@ All mutations funnel through `update(updater)`, which:
 ### The state shape
 
 ```
-{ meals, importedPlan, manualPlan, extraItems, groceryOverrides, _meta }
+{ meals, importedPlan, manualPlan, extraItems, groceryOverrides, checkedItems, prices, _meta }
 ```
 - `meals` — the library: `[{id, name, ingredients:[{name, qty, unit, category}]}]`
 - `importedPlan` — a pasted/parsed week (bulk-replaced, no per-row identity)
 - `manualPlan` — `{dayKey: mealId}`; `mealId` may be a special sentinel `__GRILL__` or `__LEFTOVER__`
 - `extraItems` — `[{id, name}]` (ad-hoc grocery additions; **was** `string[]` before the sync work — legacy strings are migrated on load in `mergeState`)
 - `groceryOverrides` — `{ingredientKey: patch | null}`; `null` means "remove this line from the list"
+- `checkedItems` — `{key: true}` shopping-checklist state; keys prefixed `i:`<lowercased ingredient name> or `x:`<extra id>. Unchecking deletes the key (tombstone).
+- `prices` — `{lowercased item name: number}` remembered unit prices (keyed by name so they carry across weeks); drives the estimated-total readout.
 - `_meta` — sync bookkeeping (see below); strip `_backup`/`_date` wrapper keys when importing a backup
+
+All of `meals`/`extraItems`/`manualPlan`/`groceryOverrides`/`checkedItems`/`prices` are the merge-tracked collections (the `KEYED` list in `merge.js`) — adding a new synced map means registering it there too.
 
 ### Derived data (not stored)
 

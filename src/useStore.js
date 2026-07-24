@@ -10,6 +10,7 @@ const DEFAULT_STATE = {
   extraItems: [],
   groceryOverrides: {},
   checkedItems: {},
+  prices: {},
 };
 
 // Normalize a saved doc into current shape: fill defaults, migrate legacy
@@ -21,6 +22,7 @@ function mergeState(saved) {
     ...rest,
     groceryOverrides: rest.groceryOverrides || {},
     checkedItems: rest.checkedItems || {},
+    prices: rest.prices || {},
   };
   s.extraItems = (s.extraItems || []).map(e =>
     typeof e === "string" ? { id: genId("x"), name: e } : e
@@ -218,6 +220,20 @@ export function useStore() {
   }
   function clearChecked() { update(s => ({ ...s, checkedItems: {} })); }
 
+  // Remembered per-item unit prices, keyed by lowercased item name so a price
+  // typed once carries across weeks and applies to any item with that name.
+  // Empty/invalid clears the entry.
+  function setPrice(name, value) {
+    const key = name.trim().toLowerCase();
+    const n = parseFloat(value);
+    update(s => {
+      const next = { ...s.prices };
+      if (!key || !isFinite(n) || n <= 0) delete next[key];
+      else next[key] = Math.round(n * 100) / 100;
+      return { ...s, prices: next };
+    });
+  }
+
   // ── Backup / Restore ──────────────────────────────────────────────────────
   // A restore is authoritative: stamp changes AND tombstone anything the backup
   // dropped, so the restored data wins the subsequent merge instead of being
@@ -250,7 +266,7 @@ export function useStore() {
     addMeal, deleteMeal, addIngredient, deleteIngredient, setIngCategory,
     importPlan, clearImport, setManualDay, clearManualDay,
     addExtraItem, deleteExtra, setOverride, clearOverrides,
-    toggleChecked, clearChecked,
+    toggleChecked, clearChecked, setPrice,
     restoreBackup, syncNow, pullNow,
   };
 }

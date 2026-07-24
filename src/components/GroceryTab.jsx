@@ -3,8 +3,8 @@ import { DAYS, WEEKDAY_TO_SHORT } from "../constants";
 import { aggregateIngredients, applyOverrides } from "../useStore";
 import { Btn, BtnSm, Input, Label, Block, EmptyState } from "./UI";
 
-export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverride, clearOverrides, toggleChecked, clearChecked }) {
-  const { importedPlan, manualPlan, extraItems, groceryOverrides, meals, checkedItems } = state;
+export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverride, clearOverrides, toggleChecked, clearChecked, setPrice }) {
+  const { importedPlan, manualPlan, extraItems, groceryOverrides, meals, checkedItems, prices } = state;
   const [exportMode, setExportMode] = useState("grocery");
   const [newExtra, setNewExtra] = useState("");
   const [editingKey, setEditingKey] = useState(null);
@@ -21,6 +21,12 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
   const extraKey = (e) => "x:" + e.id;
   const totalItems = agg.length + extraItems.length;
   const checkedCount = agg.filter(i => checked[ingKey(i)]).length + extraItems.filter(e => checked[extraKey(e)]).length;
+
+  const priceMap = prices || {};
+  const priceOf = (name) => priceMap[(name || "").trim().toLowerCase()];
+  const estTotal = agg.reduce((s, i) => s + (priceOf(i.name) || 0) * (i.qty || 1), 0)
+    + extraItems.reduce((s, e) => s + (priceOf(e.name) || 0), 0);
+  const pricedCount = agg.filter(i => priceOf(i.name)).length + extraItems.filter(e => priceOf(e.name)).length;
 
   const importedCount = importedPlan.filter(e => !e.special && e.matchedId).length;
   const manualCount = Object.values(manualPlan).filter(id => id !== "__GRILL__" && id !== "__LEFTOVER__").length;
@@ -56,6 +62,10 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
   }
 
   function buildExport() {
+    if (exportMode === "anylist") {
+      // AnyList bulk-add: one clean item name per line (it splits on line breaks).
+      return [...agg.map(i => i.name), ...extraItems.map(e => e.name)].join("\n");
+    }
     if (exportMode === "grocery") {
       const lines = agg.map(i => i.qty > 1 ? `${i.name} (${i.qty})` : i.name);
       if (extraItems.length) { lines.push(""); extraItems.forEach(e => lines.push(e.name)); }
@@ -91,6 +101,21 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
   const itemStyle = { fontSize:13, color:"#ccc", display:"flex", alignItems:"stretch", borderBottom:"1px solid #1a1a1a", margin:"0 -16px", padding:"0 16px" };
   const checkCellStyle = (on) => ({ display:"flex", alignItems:"center", justifyContent:"center", width:34, flexShrink:0, cursor:"pointer", fontSize:17, color: on ? "#4a9" : "#3a3a3a", userSelect:"none" });
   const nameStyle = (on) => ({ flex:1, textDecoration: on ? "line-through" : "none", color: on ? "#555" : undefined });
+  const priceInputStyle = { width:56, flexShrink:0, alignSelf:"center", marginLeft:8, background:"#0d0d0d", border:"1px solid #262626", borderRadius:6, color:"#bbb", fontSize:12, padding:"5px 6px", fontFamily:"inherit", textAlign:"right" };
+
+  // Uncontrolled price field, committed on blur/Enter so typing doesn't spam the
+  // synced store. Keyed by name+stored so it re-syncs if a peer changes the price.
+  function priceCell(name) {
+    const stored = priceOf(name);
+    return (
+      <input type="number" inputMode="decimal" step="0.01" min="0" placeholder="$"
+        defaultValue={stored ?? ""} key={(name || "").toLowerCase() + ":" + (stored ?? "")}
+        onClick={e => e.stopPropagation()}
+        onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
+        onBlur={e => { const v = e.target.value.trim(); if (String(v) !== String(stored ?? "")) setPrice(name, v); }}
+        style={priceInputStyle} />
+    );
+  }
 
   const tabPill = (mode, label) => (
     <button onClick={() => setExportMode(mode)}
@@ -102,7 +127,15 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
   return (
     <div>
       <h1 style={{ fontSize:22, fontWeight:700, letterSpacing:"-0.03em", color:"#fff", margin:"16px 0 4px" }}>Grocery List</h1>
-      <p style={{ fontSize:13, color:"#555", marginBottom:20 }}>{total ? `From ${total} planned meal${total !== 1 ? "s" : ""}` : "No meals planned yet"}</p>
+      <p style={{ fontSize:13, color:"#555", marginBottom:16 }}>{total ? `From ${total} planned meal${total !== 1 ? "s" : ""}` : "No meals planned yet"}</p>
+
+      {totalItems > 0 && (
+        <div style={{ display:"flex", alignItems:"baseline", gap:10, marginBottom:18, padding:"11px 14px", background:"#0d0d0d", border:"1px solid #1e1e1e", borderRadius:10 }}>
+          <span style={{ fontSize:12, color:"#777" }}>Est. total</span>
+          <span style={{ fontSize:19, fontWeight:700, color:"#fff" }}>${estTotal.toFixed(2)}</span>
+          <span style={{ fontSize:11, color:"#555", marginLeft:"auto" }}>{pricedCount}/{totalItems} priced</span>
+        </div>
+      )}
 
       {/* Ingredients */}
       {(agg.length > 0 || rawAgg.length > 0) ? (
@@ -138,6 +171,7 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
                   <span style={nameStyle(on)}>{i.name}</span>
                   {i.qty > 1 && <span style={{ color:"#555", fontSize:12 }}>({i.qty})</span>}
                 </div>
+                {priceCell(i.name)}
                 <div style={itemDelStyle} onClick={() => setOverride(key, null)}>✕</div>
               </div>
             );
@@ -156,6 +190,7 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
             <div key={item.id} style={{ ...itemStyle, marginBottom: i === extraItems.length - 1 ? 8 : 0 }}>
               <div style={checkCellStyle(on)} onClick={() => toggleChecked(extraKey(item))}>{on ? "☑" : "☐"}</div>
               <div style={{ ...itemBodyStyle, cursor:"default" }}><span style={nameStyle(on)}>{item.name}</span></div>
+              {priceCell(item.name)}
               <div style={itemDelStyle} onClick={() => deleteExtra(item.id)}>✕</div>
             </div>
           );
@@ -173,9 +208,15 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
         <Label>Export</Label>
         <div style={{ display:"flex", gap:6, marginBottom:12, flexWrap:"wrap" }}>
           {tabPill("grocery", "Grocery only")}
+          {tabPill("anylist", "AnyList")}
           {tabPill("notes", "Full Notes")}
           {tabPill("json", "JSON DB")}
         </div>
+        {exportMode === "anylist" && (
+          <p style={{ fontSize:11, color:"#555", marginTop:0, marginBottom:10, lineHeight:1.5 }}>
+            Copy, then in AnyList tap add-item and paste — it splits each line into its own item (which you can then bulk-add to Walmart from AnyList).
+          </p>
+        )}
         <div style={{ background:"#0d0d0d", border:"1px solid #222", borderRadius:10, padding:14, fontFamily:"monospace", fontSize:12, color:"#aaa", whiteSpace:"pre-wrap", wordBreak:"break-all", maxHeight:260, overflowY:"auto" }}>
           {buildExport()}
         </div>
