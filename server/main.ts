@@ -15,6 +15,7 @@
 //                     200 { ok:true, version }    on success
 //                     409 { version, data }       if someone wrote first (re-merge & retry)
 
+// redeploy marker: 1 (bump to trigger a fresh Deno Deploy build)
 const KEY = ["state"];
 const kv = await Deno.openKv();
 
