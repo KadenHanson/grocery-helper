@@ -54,6 +54,17 @@ export function normalize(s) {
   return s.toLowerCase().replace(/[^a-z0-9]/g," ").replace(/\s+/g," ").trim();
 }
 
+// Fuzzy key for remembered prices: normalized + a light plural strip so
+// "Chicken Breasts" and "chicken breast" resolve to the same saved price.
+export function priceKey(name) {
+  let k = normalize(name || "");
+  if (k.length > 3 && k.endsWith("s") && !k.endsWith("ss")) k = k.slice(0, -1);
+  return k;
+}
+
+// Sales tax rate for the optional estimate line (Orlando / Orange County, FL).
+export const TAX_RATE = 0.065;
+
 export function isSpecial(mealName) {
   const n = mealName.toLowerCase();
   return n.includes("grill out") || n.includes("leftover") || n.includes("go out");

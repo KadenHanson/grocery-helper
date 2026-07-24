@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { DEFAULT_MEALS, guessCategory, normalize, isSpecial, CATEGORIES } from "./constants";
+import { DEFAULT_MEALS, guessCategory, normalize, isSpecial, CATEGORIES, priceKey } from "./constants";
 import { loadFromCloud, saveToCloud, loadFromLocal, saveToLocal, cloudConfigured } from "./storage";
 import { normalizeMeta, stampMeta, mergeStates, genId } from "./merge";
 
@@ -226,7 +226,7 @@ export function useStore() {
   // typed once carries across weeks and applies to any item with that name.
   // Empty/invalid clears the entry.
   function setPrice(name, value) {
-    const key = name.trim().toLowerCase();
+    const key = priceKey(name);
     const n = parseFloat(value);
     update(s => {
       const next = { ...s.prices };

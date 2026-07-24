@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { DAYS, WEEKDAY_TO_SHORT, CATEGORIES, STORES, guessStore } from "../constants";
+import { DAYS, WEEKDAY_TO_SHORT, CATEGORIES, STORES, guessStore, priceKey, TAX_RATE } from "../constants";
 import { aggregateIngredients, applyOverrides } from "../useStore";
 import { Btn, BtnSm, Input, Label, Block, EmptyState } from "./UI";
 
@@ -20,7 +20,7 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
   const checked = checkedItems || {};
   const priceMap = prices || {};
   const storeMap = stores || {};
-  const priceOf = (name) => priceMap[(name || "").trim().toLowerCase()];
+  const priceOf = (name) => priceMap[priceKey(name)];
   const storeRaw = (name) => storeMap[(name || "").trim().toLowerCase()] || "";
   // Effective store: explicit assignment, else a fuzzy guess (meat/milk→Costco,
   // most else→Walmart). Used for both the Shop grouping and the Manage picker.
@@ -36,6 +36,13 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
   const estTotal = items.reduce((s, it) => s + (priceOf(it.name) || 0) * (it.qty || 1), 0);
   const pricedCount = items.filter(it => priceOf(it.name)).length;
   const lineTotal = (it) => (priceOf(it.name) || 0) * (it.qty || 1);
+  const tax = estTotal * TAX_RATE;
+  const grandTotal = estTotal + tax;
+
+  const [taxOn, setTaxOn] = useState(() => { try { return localStorage.getItem("gh_tax") === "1"; } catch { return false; } });
+  function toggleTax() {
+    setTaxOn(v => { const nv = !v; try { localStorage.setItem("gh_tax", nv ? "1" : ""); } catch {} return nv; });
+  }
 
   function showToast(msg) {
     setToast(msg);
@@ -173,10 +180,21 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
       <p style={{ fontSize: 13, color: "var(--faint)", marginBottom: 16 }}>{total ? `From ${total} planned meal${total !== 1 ? "s" : ""}` : "No meals planned yet"}</p>
 
       {totalItems > 0 && (
-        <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14, padding: "11px 14px", background: "var(--inset)", border: "1px solid var(--border-soft)", borderRadius: 10 }}>
-          <span style={{ fontSize: 12, color: "var(--muted)" }}>Est. total</span>
-          <span style={{ fontSize: 19, fontWeight: 700, color: "var(--heading)" }}>${estTotal.toFixed(2)}</span>
-          <span style={{ fontSize: 11, color: "var(--faint)", marginLeft: "auto" }}>{pricedCount}/{totalItems} priced</span>
+        <div style={{ marginBottom: 14, padding: "11px 14px", background: "var(--inset)", border: "1px solid var(--border-soft)", borderRadius: 10 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+            <span style={{ fontSize: 12, color: "var(--muted)" }}>Est. {taxOn ? "subtotal" : "total"}</span>
+            <span style={{ fontSize: 19, fontWeight: 700, color: "var(--heading)" }}>${estTotal.toFixed(2)}</span>
+            <span style={{ fontSize: 11, color: "var(--faint)", marginLeft: "auto" }}>{pricedCount}/{totalItems} priced</span>
+          </div>
+          {taxOn && (
+            <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginTop: 6 }}>
+              <span style={{ fontSize: 12, color: "var(--muted)" }}>+ Tax (6.5%) ${tax.toFixed(2)}</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: "var(--heading)", marginLeft: "auto" }}>Total ${grandTotal.toFixed(2)}</span>
+            </div>
+          )}
+          <label style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontSize: 11, color: "var(--faint)", cursor: "pointer" }}>
+            <input type="checkbox" checked={taxOn} onChange={toggleTax} style={{ cursor: "pointer" }} /> Add FL sales tax (6.5%)
+          </label>
         </div>
       )}
 

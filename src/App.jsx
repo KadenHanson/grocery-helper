@@ -82,6 +82,8 @@ export default function App() {
             addIngredient={store.addIngredient}
             deleteIngredient={store.deleteIngredient}
             setIngCategory={store.setIngCategory}
+            prices={store.state.prices}
+            setPrice={store.setPrice}
           />
         )}
         {tab === "plan" && (
