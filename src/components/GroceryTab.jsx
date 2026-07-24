@@ -3,8 +3,8 @@ import { DAYS, WEEKDAY_TO_SHORT } from "../constants";
 import { aggregateIngredients, applyOverrides } from "../useStore";
 import { Btn, BtnSm, Input, Label, Block, EmptyState } from "./UI";
 
-export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverride, clearOverrides }) {
-  const { importedPlan, manualPlan, extraItems, groceryOverrides, meals } = state;
+export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverride, clearOverrides, toggleChecked, clearChecked }) {
+  const { importedPlan, manualPlan, extraItems, groceryOverrides, meals, checkedItems } = state;
   const [exportMode, setExportMode] = useState("grocery");
   const [newExtra, setNewExtra] = useState("");
   const [editingKey, setEditingKey] = useState(null);
@@ -15,6 +15,12 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
   const rawAgg = aggregateIngredients(state);
   const agg = applyOverrides(rawAgg, groceryOverrides);
   const hasOverrides = Object.keys(groceryOverrides || {}).length > 0;
+
+  const checked = checkedItems || {};
+  const ingKey = (i) => "i:" + i.name.toLowerCase();
+  const extraKey = (e) => "x:" + e.id;
+  const totalItems = agg.length + extraItems.length;
+  const checkedCount = agg.filter(i => checked[ingKey(i)]).length + extraItems.filter(e => checked[extraKey(e)]).length;
 
   const importedCount = importedPlan.filter(e => !e.special && e.matchedId).length;
   const manualCount = Object.values(manualPlan).filter(id => id !== "__GRILL__" && id !== "__LEFTOVER__").length;
@@ -83,6 +89,8 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
   const itemBodyStyle = { flex:1, padding:"13px 0", cursor:"pointer", display:"flex", alignItems:"center", gap:8, minWidth:0 };
   const itemDelStyle = { display:"flex", alignItems:"center", justifyContent:"center", width:52, flexShrink:0, borderLeft:"1px solid #1e1e1e", marginLeft:12, cursor:"pointer", color:"#3a3a3a", fontSize:20 };
   const itemStyle = { fontSize:13, color:"#ccc", display:"flex", alignItems:"stretch", borderBottom:"1px solid #1a1a1a", margin:"0 -16px", padding:"0 16px" };
+  const checkCellStyle = (on) => ({ display:"flex", alignItems:"center", justifyContent:"center", width:34, flexShrink:0, cursor:"pointer", fontSize:17, color: on ? "#4a9" : "#3a3a3a", userSelect:"none" });
+  const nameStyle = (on) => ({ flex:1, textDecoration: on ? "line-through" : "none", color: on ? "#555" : undefined });
 
   const tabPill = (mode, label) => (
     <button onClick={() => setExportMode(mode)}
@@ -99,9 +107,13 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
       {/* Ingredients */}
       {(agg.length > 0 || rawAgg.length > 0) ? (
         <Block>
-          <div style={{ display:"flex", alignItems:"center", marginBottom:6 }}>
+          <div style={{ display:"flex", alignItems:"center", marginBottom:6, gap:8 }}>
             <Label style={{ margin:0 }}>Ingredients needed</Label>
-            {hasOverrides && <BtnSm onClick={clearOverrides} style={{ marginLeft:"auto" }}>Reset edits</BtnSm>}
+            {totalItems > 0 && <span style={{ fontSize:11, color: checkedCount === totalItems ? "#4a9" : "#555" }}>{checkedCount}/{totalItems} in cart</span>}
+            <div style={{ marginLeft:"auto", display:"flex", gap:6 }}>
+              {checkedCount > 0 && <BtnSm onClick={clearChecked}>Uncheck all</BtnSm>}
+              {hasOverrides && <BtnSm onClick={clearOverrides}>Reset edits</BtnSm>}
+            </div>
           </div>
           {agg.map(i => {
             const key = i.name.toLowerCase();
@@ -118,10 +130,12 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
                 </div>
               );
             }
+            const on = !!checked[ingKey(i)];
             return (
               <div key={key} style={itemStyle}>
+                <div style={checkCellStyle(on)} onClick={() => toggleChecked(ingKey(i))}>{on ? "☑" : "☐"}</div>
                 <div style={itemBodyStyle} onClick={() => startEdit(i)}>
-                  <span style={{ flex:1 }}>{i.name}</span>
+                  <span style={nameStyle(on)}>{i.name}</span>
                   {i.qty > 1 && <span style={{ color:"#555", fontSize:12 }}>({i.qty})</span>}
                 </div>
                 <div style={itemDelStyle} onClick={() => setOverride(key, null)}>✕</div>
@@ -136,12 +150,16 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
       {/* Extra items */}
       <Block>
         <Label>Extra items</Label>
-        {extraItems.map((item, i) => (
-          <div key={item.id} style={{ ...itemStyle, marginBottom: i === extraItems.length - 1 ? 8 : 0 }}>
-            <div style={{ ...itemBodyStyle, cursor:"default" }}><span style={{ flex:1 }}>{item.name}</span></div>
-            <div style={itemDelStyle} onClick={() => deleteExtra(item.id)}>✕</div>
-          </div>
-        ))}
+        {extraItems.map((item, i) => {
+          const on = !!checked[extraKey(item)];
+          return (
+            <div key={item.id} style={{ ...itemStyle, marginBottom: i === extraItems.length - 1 ? 8 : 0 }}>
+              <div style={checkCellStyle(on)} onClick={() => toggleChecked(extraKey(item))}>{on ? "☑" : "☐"}</div>
+              <div style={{ ...itemBodyStyle, cursor:"default" }}><span style={nameStyle(on)}>{item.name}</span></div>
+              <div style={itemDelStyle} onClick={() => deleteExtra(item.id)}>✕</div>
+            </div>
+          );
+        })}
         <div style={{ display:"flex", gap:8, marginTop:8 }}>
           <Input value={newExtra} onChange={e => setNewExtra(e.target.value)}
             onKeyDown={e => e.key === "Enter" && handleAddExtra()}

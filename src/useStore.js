@@ -9,6 +9,7 @@ const DEFAULT_STATE = {
   manualPlan: {},
   extraItems: [],
   groceryOverrides: {},
+  checkedItems: {},
 };
 
 // Normalize a saved doc into current shape: fill defaults, migrate legacy
@@ -19,6 +20,7 @@ function mergeState(saved) {
     ...DEFAULT_STATE,
     ...rest,
     groceryOverrides: rest.groceryOverrides || {},
+    checkedItems: rest.checkedItems || {},
   };
   s.extraItems = (s.extraItems || []).map(e =>
     typeof e === "string" ? { id: genId("x"), name: e } : e
@@ -203,6 +205,19 @@ export function useStore() {
   }
   function clearOverrides() { update(s => ({ ...s, groceryOverrides: {} })); }
 
+  // Interactive shopping checklist. Keys are prefixed by source ("i:"<name> for
+  // aggregated ingredients, "x:"<id> for extra items) so the two never collide.
+  // Unchecking deletes the key (a merge tombstone) so the map holds only checked
+  // entries — same last-writer-wins semantics as the other synced collections.
+  function toggleChecked(key) {
+    update(s => {
+      const next = { ...s.checkedItems };
+      if (next[key]) delete next[key]; else next[key] = true;
+      return { ...s, checkedItems: next };
+    });
+  }
+  function clearChecked() { update(s => ({ ...s, checkedItems: {} })); }
+
   // ── Backup / Restore ──────────────────────────────────────────────────────
   // A restore is authoritative: stamp changes AND tombstone anything the backup
   // dropped, so the restored data wins the subsequent merge instead of being
@@ -235,6 +250,7 @@ export function useStore() {
     addMeal, deleteMeal, addIngredient, deleteIngredient, setIngCategory,
     importPlan, clearImport, setManualDay, clearManualDay,
     addExtraItem, deleteExtra, setOverride, clearOverrides,
+    toggleChecked, clearChecked,
     restoreBackup, syncNow, pullNow,
   };
 }

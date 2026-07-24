@@ -86,6 +86,8 @@ export default function App() {
             deleteExtra={store.deleteExtra}
             setOverride={store.setOverride}
             clearOverrides={store.clearOverrides}
+            toggleChecked={store.toggleChecked}
+            clearChecked={store.clearChecked}
           />
         )}
       </main>
