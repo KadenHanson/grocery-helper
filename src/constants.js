@@ -41,6 +41,15 @@ export function guessCategory(name) {
   return "Other";
 }
 
+// Rough default store when none is explicitly set. Meat & milk are usually a
+// Costco run; most everything else is Walmart. Sam's Club is specific enough
+// that it's left to manual assignment (never auto-guessed).
+const COSTCO_HINTS = ["milk", ...CAT_KEYWORDS["Meat & Protein"]];
+export function guessStore(name) {
+  const n = (name || "").toLowerCase();
+  return COSTCO_HINTS.some(k => n.includes(k)) ? "Costco" : "Walmart";
+}
+
 export function normalize(s) {
   return s.toLowerCase().replace(/[^a-z0-9]/g," ").replace(/\s+/g," ").trim();
 }

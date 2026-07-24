@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { DAYS, WEEKDAY_TO_SHORT, CATEGORIES, STORES } from "../constants";
+import { DAYS, WEEKDAY_TO_SHORT, CATEGORIES, STORES, guessStore } from "../constants";
 import { aggregateIngredients, applyOverrides } from "../useStore";
 import { Btn, BtnSm, Input, Label, Block, EmptyState } from "./UI";
 
@@ -22,7 +22,9 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
   const storeMap = stores || {};
   const priceOf = (name) => priceMap[(name || "").trim().toLowerCase()];
   const storeRaw = (name) => storeMap[(name || "").trim().toLowerCase()] || "";
-  const storeOf = (name) => storeRaw(name) || "Unassigned";
+  // Effective store: explicit assignment, else a fuzzy guess (meat/milk→Costco,
+  // most else→Walmart). Used for both the Shop grouping and the Manage picker.
+  const storeOf = (name) => storeRaw(name) || guessStore(name);
 
   // Unified item list used by both views (ingredients + extras).
   const items = [
@@ -110,11 +112,11 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
   const storeGroups = storeOrder.filter(s => byStore[s]).map(s => ({ store: s, items: byStore[s] }));
 
   const itemBodyStyle = { flex: 1, padding: "13px 0", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, minWidth: 0 };
-  const itemDelStyle = { display: "flex", alignItems: "center", justifyContent: "center", width: 44, flexShrink: 0, borderLeft: "1px solid #1e1e1e", marginLeft: 8, cursor: "pointer", color: "#3a3a3a", fontSize: 18 };
-  const itemStyle = { fontSize: 13, color: "#ccc", display: "flex", alignItems: "stretch", borderBottom: "1px solid #1a1a1a", margin: "0 -16px", padding: "0 16px" };
-  const nameStyle = (on) => ({ flex: 1, textDecoration: on ? "line-through" : "none", color: on ? "#555" : undefined });
-  const priceInputStyle = { width: 56, flexShrink: 0, alignSelf: "center", marginLeft: 8, background: "#0d0d0d", border: "1px solid #262626", borderRadius: 6, color: "#bbb", fontSize: 12, padding: "5px 6px", fontFamily: "inherit", textAlign: "right" };
-  const storeSelectStyle = { width: 92, flexShrink: 0, alignSelf: "center", marginLeft: 8, background: "#0d0d0d", border: "1px solid #262626", borderRadius: 6, color: "#bbb", fontSize: 11, padding: "5px 4px", fontFamily: "inherit" };
+  const itemDelStyle = { display: "flex", alignItems: "center", justifyContent: "center", width: 44, flexShrink: 0, borderLeft: "1px solid var(--border-soft)", marginLeft: 8, cursor: "pointer", color: "var(--ghost)", fontSize: 18 };
+  const itemStyle = { fontSize: 13, color: "var(--text-2)", display: "flex", alignItems: "stretch", borderBottom: "1px solid var(--border-soft)", margin: "0 -16px", padding: "0 16px" };
+  const nameStyle = (on) => ({ flex: 1, textDecoration: on ? "line-through" : "none", color: on ? "var(--faint)" : undefined });
+  const priceInputStyle = { width: 56, flexShrink: 0, alignSelf: "center", marginLeft: 8, background: "var(--inset)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--muted)", fontSize: 12, padding: "5px 6px", fontFamily: "inherit", textAlign: "right" };
+  const storeSelectStyle = { width: 92, flexShrink: 0, alignSelf: "center", marginLeft: 8, background: "var(--inset)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--muted)", fontSize: 11, padding: "5px 4px", fontFamily: "inherit" };
 
   function priceCell(name) {
     const stored = priceOf(name);
@@ -129,8 +131,8 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
   }
   function storeCell(name) {
     return (
-      <select value={storeRaw(name)} onClick={e => e.stopPropagation()} onChange={e => setStore(name, e.target.value)} style={storeSelectStyle}>
-        <option value="">Store…</option>
+      <select value={storeOf(name)} onClick={e => e.stopPropagation()} onChange={e => setStore(name, e.target.value)} style={storeSelectStyle}>
+        <option value="">Auto</option>
         {STORES.map(s => <option key={s} value={s}>{s}</option>)}
       </select>
     );
@@ -142,39 +144,39 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
 
   const pill = (active, onClick, label) => (
     <button onClick={onClick}
-      style={{ padding: "6px 14px", borderRadius: 20, border: `1px solid ${active ? "#e8e8e8" : "#2a2a2a"}`, background: "none", color: active ? "#e8e8e8" : "#555", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+      style={{ padding: "6px 14px", borderRadius: 20, border: `1px solid ${active ? "var(--text)" : "var(--border)"}`, background: "none", color: active ? "var(--text)" : "var(--faint)", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
       {label}
     </button>
   );
 
   // Big, tap-friendly checkbox for the shop view.
-  const bigCheckStyle = (on) => ({ display: "flex", alignItems: "center", justifyContent: "center", width: 46, height: 46, flexShrink: 0, fontSize: 27, color: on ? "#4a9" : "#4a4a4a", userSelect: "none" });
+  const bigCheckStyle = (on) => ({ display: "flex", alignItems: "center", justifyContent: "center", width: 46, height: 46, flexShrink: 0, fontSize: 27, color: on ? "var(--accent)" : "var(--ghost)", userSelect: "none" });
 
   function shopRow(it) {
     const on = !!checked[it.checkKey];
     const lt = lineTotal(it);
     return (
       <div key={it.checkKey} onClick={() => toggleChecked(it.checkKey)}
-        style={{ display: "flex", alignItems: "center", gap: 4, borderBottom: "1px solid #161616", cursor: "pointer" }}>
+        style={{ display: "flex", alignItems: "center", gap: 4, borderBottom: "1px solid var(--border-soft)", cursor: "pointer" }}>
         <div style={bigCheckStyle(on)}>{on ? "☑" : "☐"}</div>
-        <span style={{ flex: 1, fontSize: 15, textDecoration: on ? "line-through" : "none", color: on ? "#555" : "#e0e0e0" }}>
+        <span style={{ flex: 1, fontSize: 15, textDecoration: on ? "line-through" : "none", color: on ? "var(--faint)" : "var(--text)" }}>
           {it.name}{it.qty > 1 ? ` ×${it.qty}` : ""}
         </span>
-        {lt > 0 && <span style={{ fontSize: 13, color: on ? "#3f3f3f" : "#888", paddingRight: 4 }}>${lt.toFixed(2)}</span>}
+        {lt > 0 && <span style={{ fontSize: 13, color: on ? "var(--ghost)" : "var(--muted)", paddingRight: 4 }}>${lt.toFixed(2)}</span>}
       </div>
     );
   }
 
   return (
     <div>
-      <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.03em", color: "#fff", margin: "16px 0 4px" }}>Grocery List</h1>
-      <p style={{ fontSize: 13, color: "#555", marginBottom: 16 }}>{total ? `From ${total} planned meal${total !== 1 ? "s" : ""}` : "No meals planned yet"}</p>
+      <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.03em", color: "var(--heading)", margin: "16px 0 4px" }}>Grocery List</h1>
+      <p style={{ fontSize: 13, color: "var(--faint)", marginBottom: 16 }}>{total ? `From ${total} planned meal${total !== 1 ? "s" : ""}` : "No meals planned yet"}</p>
 
       {totalItems > 0 && (
-        <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14, padding: "11px 14px", background: "#0d0d0d", border: "1px solid #1e1e1e", borderRadius: 10 }}>
-          <span style={{ fontSize: 12, color: "#777" }}>Est. total</span>
-          <span style={{ fontSize: 19, fontWeight: 700, color: "#fff" }}>${estTotal.toFixed(2)}</span>
-          <span style={{ fontSize: 11, color: "#555", marginLeft: "auto" }}>{pricedCount}/{totalItems} priced</span>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14, padding: "11px 14px", background: "var(--inset)", border: "1px solid var(--border-soft)", borderRadius: 10 }}>
+          <span style={{ fontSize: 12, color: "var(--muted)" }}>Est. total</span>
+          <span style={{ fontSize: 19, fontWeight: 700, color: "var(--heading)" }}>${estTotal.toFixed(2)}</span>
+          <span style={{ fontSize: 11, color: "var(--faint)", marginLeft: "auto" }}>{pricedCount}/{totalItems} priced</span>
         </div>
       )}
 
@@ -211,7 +213,7 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
                   <div key={key} style={itemStyle}>
                     <div style={itemBodyStyle} onClick={() => startEdit(i)}>
                       <span style={{ flex: 1 }}>{i.name}</span>
-                      {i.qty > 1 && <span style={{ color: "#555", fontSize: 12 }}>({i.qty})</span>}
+                      {i.qty > 1 && <span style={{ color: "var(--faint)", fontSize: 12 }}>({i.qty})</span>}
                     </div>
                     {storeCell(i.name)}
                     {priceCell(i.name)}
@@ -252,14 +254,14 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
               {pill(exportMode === "json", () => setExportMode("json"), "JSON DB")}
             </div>
             {exportMode === "anylist" && (
-              <p style={{ fontSize: 11, color: "#555", marginTop: 0, marginBottom: 10, lineHeight: 1.5 }}>
+              <p style={{ fontSize: 11, color: "var(--faint)", marginTop: 0, marginBottom: 10, lineHeight: 1.5 }}>
                 Copy, then in AnyList tap add-item and paste — it splits each line into its own item.
               </p>
             )}
-            <div style={{ background: "#0d0d0d", border: "1px solid #222", borderRadius: 10, padding: 14, fontFamily: "monospace", fontSize: 12, color: "#aaa", whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: 260, overflowY: "auto" }}>
+            <div style={{ background: "var(--inset)", border: "1px solid var(--border)", borderRadius: 10, padding: 14, fontFamily: "monospace", fontSize: 12, color: "var(--muted)", whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: 260, overflowY: "auto" }}>
               {buildExport()}
             </div>
-            <button onClick={copyExport} style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 600, fontSize: 13, background: "#1e1e1e", color: "#aaa", marginTop: 12, fontFamily: "inherit" }}>
+            <button onClick={copyExport} style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 600, fontSize: 13, background: "var(--btn-bg)", color: "var(--muted)", marginTop: 12, fontFamily: "inherit" }}>
               📋 Copy to clipboard
             </button>
           </Block>
@@ -271,7 +273,7 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
         ) : (
           <>
             <div style={{ display: "flex", alignItems: "center", marginBottom: 12, gap: 8 }}>
-              <span style={{ fontSize: 13, color: checkedCount === totalItems ? "#4a9" : "#888" }}>{checkedCount} of {totalItems} in cart</span>
+              <span style={{ fontSize: 13, color: checkedCount === totalItems ? "var(--accent)" : "var(--muted)" }}>{checkedCount} of {totalItems} in cart</span>
               {checkedCount > 0 && <BtnSm onClick={clearChecked} style={{ marginLeft: "auto" }}>Uncheck all</BtnSm>}
             </div>
             {storeGroups.map(g => {
@@ -280,13 +282,13 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
               return (
                 <Block key={g.store}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
-                    <span style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{g.store}</span>
-                    <span style={{ fontSize: 11, color: gChecked === g.items.length ? "#4a9" : "#555" }}>{gChecked}/{g.items.length}</span>
-                    {gSubtotal > 0 && <span style={{ marginLeft: "auto", fontSize: 13, color: "#888" }}>${gSubtotal.toFixed(2)}</span>}
+                    <span style={{ fontSize: 15, fontWeight: 700, color: "var(--heading)" }}>{g.store}</span>
+                    <span style={{ fontSize: 11, color: gChecked === g.items.length ? "var(--accent)" : "var(--faint)" }}>{gChecked}/{g.items.length}</span>
+                    {gSubtotal > 0 && <span style={{ marginLeft: "auto", fontSize: 13, color: "var(--muted)" }}>${gSubtotal.toFixed(2)}</span>}
                   </div>
                   {byCategory(g.items).map(cg => (
                     <div key={cg.category}>
-                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: "#3a3a3a", textTransform: "uppercase", margin: "10px 0 2px" }}>{cg.category}</div>
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: "var(--ghost)", textTransform: "uppercase", margin: "10px 0 2px" }}>{cg.category}</div>
                       {cg.items.map(shopRow)}
                     </div>
                   ))}
@@ -298,7 +300,7 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
       )}
 
       {toast && (
-        <div style={{ position: "fixed", bottom: 28, left: "50%", transform: "translateX(-50%)", background: "#e8e8e8", color: "#0a0a0a", borderRadius: 10, padding: "10px 20px", fontWeight: 600, fontSize: 13, zIndex: 999, pointerEvents: "none", whiteSpace: "nowrap" }}>
+        <div style={{ position: "fixed", bottom: 28, left: "50%", transform: "translateX(-50%)", background: "var(--invert-bg)", color: "var(--invert-fg)", borderRadius: 10, padding: "10px 20px", fontWeight: 600, fontSize: 13, zIndex: 999, pointerEvents: "none", whiteSpace: "nowrap" }}>
           {toast}
         </div>
       )}

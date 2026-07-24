@@ -60,6 +60,10 @@ All of `meals`/`extraItems`/`manualPlan`/`groceryOverrides`/`checkedItems`/`pric
 
 The grocery list is computed, never persisted. `aggregateIngredients(state)` (in `useStore.js`) walks `importedPlan` + `manualPlan`, sums ingredient quantities by lowercased name, sorts by `CATEGORIES` order; `applyOverrides(agg, groceryOverrides)` then applies user edits/removals. `GroceryTab.jsx` renders the result and builds the copy-to-clipboard export formats.
 
+### Styling & theme
+
+All styling is inline styles referencing **CSS variables** defined in `src/index.css` — a dark palette on `:root` and a light override on `:root[data-theme="light"]`. Tokens: `--bg`, `--surface`, `--card`, `--inset`, `--input-bg`, `--btn-bg`, `--border`, `--border-soft`, `--text`, `--text-2`, `--heading`, `--muted`, `--faint`, `--ghost`, `--accent`, `--danger(-bg/-fg)`, `--warn(-bg)`, `--invert-bg/-fg` (the light-on-dark pair used by primary buttons / active nav / toast). **Never hardcode a hex in a component — use a `var(--token)`.** `App.jsx` owns the theme: a per-device preference in `localStorage` (`gh_theme`, not synced) written to `document.documentElement[data-theme]`, toggled by the ☀️/🌙 button in the nav.
+
 ### constants.js — the domain heuristics
 
 - `DEFAULT_MEALS` seeds a new user's library.

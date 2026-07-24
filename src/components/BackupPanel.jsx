@@ -41,40 +41,40 @@ export default function BackupPanel({ state, restoreBackup, syncNow, pullNow, sy
   }
 
   const syncLabel = { idle:"", saving:"Syncing…", saved:"Synced ✓", error:"Sync failed" }[syncStatus];
-  const syncColor = { idle:"#444", saving:"#555", saved:"#4a9", error:"#c44" }[syncStatus];
+  const syncColor = { idle:"var(--ghost)", saving:"var(--faint)", saved:"var(--accent)", error:"var(--danger)" }[syncStatus];
 
   return (
-    <div style={{ background:"#111", borderBottom:"1px solid #222", padding:"14px 16px" }}>
+    <div style={{ background:"var(--surface)", borderBottom:"1px solid var(--border)", padding:"14px 16px" }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
-        <span style={{ fontSize:11, fontWeight:700, letterSpacing:"0.08em", color:"#444", textTransform:"uppercase" }}>Settings</span>
-        <button onClick={onClose} style={{ background:"none", border:"none", color:"#555", cursor:"pointer", fontSize:18 }}>✕</button>
+        <span style={{ fontSize:11, fontWeight:700, letterSpacing:"0.08em", color:"var(--ghost)", textTransform:"uppercase" }}>Settings</span>
+        <button onClick={onClose} style={{ background:"none", border:"none", color:"var(--faint)", cursor:"pointer", fontSize:18 }}>✕</button>
       </div>
 
-      <span style={{ fontSize:11, fontWeight:700, letterSpacing:"0.06em", color:"#333", textTransform:"uppercase", display:"block", marginBottom:6 }}>Backup</span>
+      <span style={{ fontSize:11, fontWeight:700, letterSpacing:"0.06em", color:"var(--ghost)", textTransform:"uppercase", display:"block", marginBottom:6 }}>Backup</span>
       <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:12 }}>
         <Btn variant="primary" onClick={handleBackup}>↓ Save backup</Btn>
         <Btn onClick={() => fileRef.current.click()}>↑ Restore backup</Btn>
         <input type="file" ref={fileRef} accept=".json" style={{ display:"none" }} onChange={handleRestore} />
       </div>
 
-      <span style={{ fontSize:11, fontWeight:700, letterSpacing:"0.06em", color:"#333", textTransform:"uppercase", display:"block", marginBottom:6 }}>Cloud sync</span>
+      <span style={{ fontSize:11, fontWeight:700, letterSpacing:"0.06em", color:"var(--ghost)", textTransform:"uppercase", display:"block", marginBottom:6 }}>Cloud sync</span>
       <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center", marginBottom:8 }}>
         <input
           type="password"
           value={secret}
           onChange={e => setSecretInput(e.target.value)}
           placeholder="Shared secret"
-          style={{ flex:"1 1 160px", minWidth:0, padding:"7px 10px", borderRadius:8, border:"1px solid #333", background:"#0a0a0a", color:"#e8e8e8", fontSize:13, fontFamily:"inherit" }}
+          style={{ flex:"1 1 160px", minWidth:0, padding:"7px 10px", borderRadius:8, border:"1px solid var(--border)", background:"var(--inset)", color:"var(--text)", fontSize:13, fontFamily:"inherit" }}
         />
         <Btn variant="primary" onClick={saveSecret}>Save secret</Btn>
       </div>
-      {secretMsg && <p style={{ fontSize:11, color:"#4a9", marginTop:0, marginBottom:8 }}>{secretMsg}</p>}
+      {secretMsg && <p style={{ fontSize:11, color:"var(--accent)", marginTop:0, marginBottom:8 }}>{secretMsg}</p>}
       <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
         <Btn onClick={syncNow}>↑ Push changes</Btn>
         <Btn onClick={pullNow}>↓ Pull latest</Btn>
         {syncLabel && <span style={{ fontSize:12, color:syncColor }}>{syncLabel}</span>}
       </div>
-      <p style={{ fontSize:11, color:"#333", marginTop:8, lineHeight:1.5 }}>Enter the shared secret once on each device to enable sync — it's stored only on this device, never in the app. Push sends your data to the cloud; Pull loads the latest (useful if your wife made changes).</p>
+      <p style={{ fontSize:11, color:"var(--ghost)", marginTop:8, lineHeight:1.5 }}>Enter the shared secret once on each device to enable sync — it's stored only on this device, never in the app. Push sends your data to the cloud; Pull loads the latest (useful if your wife made changes).</p>
     </div>
   );
 }

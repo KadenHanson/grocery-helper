@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { CATEGORIES, guessCategory } from "../constants";
-import { Card, Btn, BtnSm, Input, Label, Badge, EmptyState } from "./UI";
+import { Card, Btn, Input, Label, Badge, EmptyState } from "./UI";
 
 export default function MealsTab({ meals, addMeal, deleteMeal, addIngredient, deleteIngredient, setIngCategory }) {
   const [expanded, setExpanded] = useState(null);
@@ -30,8 +30,8 @@ export default function MealsTab({ meals, addMeal, deleteMeal, addIngredient, de
     <div>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
         <div>
-          <h1 style={{ fontSize:22, fontWeight:700, letterSpacing:"-0.03em", color:"#fff", margin:"16px 0 4px" }}>Meal Library</h1>
-          <p style={{ fontSize:13, color:"#555", marginBottom:0 }}>{meals.length} meals · tap to manage ingredients</p>
+          <h1 style={{ fontSize:22, fontWeight:700, letterSpacing:"-0.03em", color:"var(--heading)", margin:"16px 0 4px" }}>Meal Library</h1>
+          <p style={{ fontSize:13, color:"var(--faint)", marginBottom:0 }}>{meals.length} meals · tap to manage ingredients</p>
         </div>
         <Btn variant="primary" onClick={() => setAdding(true)}>+ Add</Btn>
       </div>
@@ -60,26 +60,26 @@ export default function MealsTab({ meals, addMeal, deleteMeal, addIngredient, de
           <Card key={meal.id}>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 14px", cursor:"pointer", userSelect:"none" }}
               onClick={() => setExpanded(open ? null : meal.id)}>
-              <span style={{ fontWeight:600, fontSize:14, color:"#e8e8e8", flex:1 }}>{meal.name}</span>
+              <span style={{ fontWeight:600, fontSize:14, color:"var(--text)", flex:1 }}>{meal.name}</span>
               <Badge>{meal.ingredients.length} ing</Badge>
               <button onClick={e => { e.stopPropagation(); deleteMeal(meal.id); }}
-                style={{ background:"none", border:"none", cursor:"pointer", color:"#c44", fontSize:16, padding:"2px 4px", marginLeft:4 }}>✕</button>
+                style={{ background:"none", border:"none", cursor:"pointer", color:"var(--danger)", fontSize:16, padding:"2px 4px", marginLeft:4 }}>✕</button>
             </div>
 
             {open && (
-              <div style={{ padding:"0 14px 14px", borderTop:"1px solid #1e1e1e" }}>
+              <div style={{ padding:"0 14px 14px", borderTop:"1px solid var(--border-soft)" }}>
                 {meal.ingredients.length === 0 && <EmptyState style={{ padding:"16px 0" }}>No ingredients yet.</EmptyState>}
 
                 {meal.ingredients.map((ing, idx) => (
-                  <div key={idx} style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:4, padding:"7px 0", borderBottom:"1px solid #1a1a1a" }}>
-                    <span style={{ flex:1, fontSize:13, color:"#ccc", minWidth:100 }}>{ing.name}</span>
+                  <div key={idx} style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:4, padding:"7px 0", borderBottom:"1px solid var(--border-soft)" }}>
+                    <span style={{ flex:1, fontSize:13, color:"var(--text-2)", minWidth:100 }}>{ing.name}</span>
                     <select value={ing.category || guessCategory(ing.name)}
                       onChange={e => setIngCategory(meal.id, idx, e.target.value)}
-                      style={{ background:"#1a1a1a", border:"1px solid #2a2a2a", borderRadius:6, color:"#555", fontSize:11, padding:"2px 6px", outline:"none" }}>
+                      style={{ background:"var(--input-bg)", border:"1px solid var(--border)", borderRadius:6, color:"var(--faint)", fontSize:11, padding:"2px 6px", outline:"none" }}>
                       {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                     <button onClick={() => deleteIngredient(meal.id, idx)}
-                      style={{ background:"none", border:"none", cursor:"pointer", color:"#c44", fontSize:16, padding:"2px 4px" }}>✕</button>
+                      style={{ background:"none", border:"none", cursor:"pointer", color:"var(--danger)", fontSize:16, padding:"2px 4px" }}>✕</button>
                   </div>
                 ))}
 
