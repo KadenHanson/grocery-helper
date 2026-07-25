@@ -5,13 +5,12 @@ import { getSecret, setSecret } from "../storage";
 export default function BackupPanel({ state, restoreBackup, syncNow, pullNow, syncStatus, onClose }) {
   const fileRef = useRef();
   const [secret, setSecretInput] = useState(getSecret());
-  const [secretMsg, setSecretMsg] = useState("");
 
   function saveSecret() {
     setSecret(secret.trim());
-    setSecretMsg(secret.trim() ? "Secret saved — pulling latest…" : "Secret cleared");
-    setTimeout(() => setSecretMsg(""), 2500);
-    if (secret.trim()) pullNow(); // now authenticated — grab the shared data
+    // Reload so the app re-initializes into this secret's own namespace (its own
+    // local store + cloud data), instead of carrying the previous data over.
+    window.location.reload();
   }
 
   function handleBackup() {
@@ -68,7 +67,6 @@ export default function BackupPanel({ state, restoreBackup, syncNow, pullNow, sy
         />
         <Btn variant="primary" onClick={saveSecret}>Save secret</Btn>
       </div>
-      {secretMsg && <p style={{ fontSize:11, color:"var(--accent)", marginTop:0, marginBottom:8 }}>{secretMsg}</p>}
       <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
         <Btn onClick={syncNow}>↑ Push changes</Btn>
         <Btn onClick={pullNow}>↓ Pull latest</Btn>

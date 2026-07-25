@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { DEFAULT_MEALS, guessCategory, normalize, isSpecial, CATEGORIES, priceKey } from "./constants";
+import { guessCategory, normalize, isSpecial, CATEGORIES, priceKey } from "./constants";
 import { loadFromCloud, saveToCloud, loadFromLocal, saveToLocal, cloudConfigured } from "./storage";
 import { normalizeMeta, stampMeta, mergeStates, genId } from "./merge";
 
 const DEFAULT_STATE = {
-  meals: DEFAULT_MEALS,
+  meals: [],
   importedPlan: [],
   manualPlan: {},
   extraItems: [],

@@ -69,13 +69,26 @@ export async function saveToCloud(state, version) {
   }
 }
 
+// Local cache is namespaced per secret so different households (different
+// secrets) never share a local store — otherwise switching secrets would merge
+// one household's data (and its deletion tombstones) into another's.
+function shortHash(s) {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+function localKey() {
+  const s = getSecret();
+  return s ? "mealdb3_" + shortHash(s) : "mealdb3";
+}
+
 export function loadFromLocal() {
   try {
-    const s = localStorage.getItem("mealdb3");
+    const s = localStorage.getItem(localKey());
     return s ? JSON.parse(s) : null;
   } catch { return null; }
 }
 
 export function saveToLocal(state) {
-  try { localStorage.setItem("mealdb3", JSON.stringify(state)); } catch {}
+  try { localStorage.setItem(localKey(), JSON.stringify(state)); } catch {}
 }
