@@ -1,34 +1,22 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 
-// Text input with a fuzzy (substring) suggestion dropdown. The dropdown is
-// position:fixed (measured from the input) so it escapes any overflow:hidden
-// ancestor (e.g. the meal Card). onSelect fires when a suggestion is picked.
+// Text input with a fuzzy (substring) suggestion dropdown. Positioned absolute
+// relative to its wrapper (reliable on mobile with the keyboard up, unlike
+// fixed) — its container must not clip overflow. onSelect fires on pick.
 export function Autocomplete({ value, onChange, onSelect, options, placeholder, autoFocus, onEnter, wrapperStyle }) {
   const [open, setOpen] = useState(false);
-  const [rect, setRect] = useState(null);
-  const ref = useRef(null);
   const q = (value || "").trim().toLowerCase();
   const matches = q ? options.filter(o => { const l = o.toLowerCase(); return l.includes(q) && l !== q; }).slice(0, 8) : [];
-  const measure = () => { if (ref.current) setRect(ref.current.getBoundingClientRect()); };
-  useEffect(() => {
-    if (!open) return;
-    measure();
-    const h = () => measure();
-    window.addEventListener("scroll", h, true);
-    window.addEventListener("resize", h);
-    return () => { window.removeEventListener("scroll", h, true); window.removeEventListener("resize", h); };
-  }, [open]);
-  const show = open && matches.length > 0 && rect;
   return (
     <div style={{ position:"relative", ...wrapperStyle }}>
-      <input ref={ref} type="text" value={value} autoFocus={autoFocus} placeholder={placeholder}
+      <input type="text" value={value} autoFocus={autoFocus} placeholder={placeholder}
         onChange={e => { onChange(e.target.value); setOpen(true); }}
-        onFocus={() => { setOpen(true); measure(); }}
+        onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 120)}
         onKeyDown={e => { if (e.key === "Enter") { setOpen(false); onEnter && onEnter(); } if (e.key === "Escape") setOpen(false); }}
         style={{ background:"var(--input-bg)", border:"1px solid var(--border)", borderRadius:8, color:"var(--text)", fontSize:13, padding:"9px 12px", outline:"none", width:"100%", fontFamily:"inherit" }} />
-      {show && (
-        <div style={{ position:"fixed", top: rect.bottom + 4, left: rect.left, width: rect.width, zIndex:50, background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, boxShadow:"0 8px 20px rgba(0,0,0,0.35)", overflow:"hidden", maxHeight:220, overflowY:"auto" }}>
+      {open && matches.length > 0 && (
+        <div style={{ position:"absolute", top:"calc(100% + 4px)", left:0, right:0, zIndex:50, background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, boxShadow:"0 8px 20px rgba(0,0,0,0.35)", overflow:"hidden", maxHeight:220, overflowY:"auto" }}>
           {matches.map(m => (
             <div key={m} onMouseDown={e => { e.preventDefault(); onSelect(m); setOpen(false); }}
               style={{ padding:"8px 12px", fontSize:13, color:"var(--text-2)", cursor:"pointer", borderBottom:"1px solid var(--border-soft)" }}>
@@ -42,7 +30,7 @@ export function Autocomplete({ value, onChange, onSelect, options, placeholder, 
 }
 
 export function Card({ children, style }) {
-  return <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:12, marginBottom:10, overflow:"hidden", ...style }}>{children}</div>;
+  return <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:12, marginBottom:10, ...style }}>{children}</div>;
 }
 
 export function Btn({ children, onClick, variant, style, type }) {
