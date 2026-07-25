@@ -31,6 +31,7 @@ export function emptyMeta() {
     v: 1,
     meals: {}, extraItems: {}, manualPlan: {}, groceryOverrides: {}, checkedItems: {}, prices: {}, stores: {}, qtyTypes: {},
     importedPlan: 0,
+    planStart: 0,
     del: { meals: {}, extraItems: {}, manualPlan: {}, groceryOverrides: {}, checkedItems: {}, prices: {}, stores: {}, qtyTypes: {} },
   };
 }
@@ -44,6 +45,7 @@ export function normalizeMeta(state) {
     meta.del[coll] = { ...((src.del && src.del[coll]) || {}) };
   }
   meta.importedPlan = src.importedPlan || 0;
+  meta.planStart = src.planStart || 0;
   return { ...state, _meta: meta };
 }
 
@@ -54,6 +56,7 @@ function cloneMeta(m) {
     out.del[coll] = { ...((m.del && m.del[coll]) || {}) };
   }
   out.importedPlan = m.importedPlan || 0;
+  out.planStart = m.planStart || 0;
   return out;
 }
 
@@ -86,6 +89,8 @@ export function stampMeta(prev, next) {
   stampMap(prev.qtyTypes || {}, next.qtyTypes || {}, meta.qtyTypes, meta.del.qtyTypes, t);
   if (JSON.stringify(prev.importedPlan || []) !== JSON.stringify(next.importedPlan || []))
     meta.importedPlan = t;
+  if ((prev.planStart || "") !== (next.planStart || ""))
+    meta.planStart = t;
   return meta;
 }
 
@@ -152,6 +157,10 @@ export function mergeStates(local, cloud) {
   const ipA = a.importedPlan, ipB = b.importedPlan;
   out.importedPlan = (ipA > ipB ? local.importedPlan : cloud.importedPlan) || [];
   meta.importedPlan = Math.max(ipA, ipB);
+
+  const psA = a.planStart, psB = b.planStart;
+  out.planStart = (psA > psB ? local.planStart : cloud.planStart) || "";
+  meta.planStart = Math.max(psA, psB);
 
   out._meta = gcTombstones(meta);
   return out;

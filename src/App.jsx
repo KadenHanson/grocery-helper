@@ -104,6 +104,10 @@ export default function App() {
             clearImport={store.clearImport}
             setManualDay={store.setManualDay}
             clearManualDay={store.clearManualDay}
+            setPlanStart={store.setPlanStart}
+            swapDays={store.swapDays}
+            swapImported={store.swapImported}
+            setImportedMeal={store.setImportedMeal}
           />
         )}
         {tab === "grocery" && (

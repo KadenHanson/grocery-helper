@@ -13,6 +13,7 @@ const DEFAULT_STATE = {
   prices: {},
   stores: {},
   qtyTypes: {},
+  planStart: "",
 };
 
 // Normalize a saved doc into current shape: fill defaults, migrate legacy
@@ -27,6 +28,7 @@ function mergeState(saved) {
     prices: rest.prices || {},
     stores: rest.stores || {},
     qtyTypes: rest.qtyTypes || {},
+    planStart: rest.planStart || "",
   };
   s.extraItems = (s.extraItems || []).map(e =>
     typeof e === "string" ? { id: genId("x"), name: e } : e
@@ -201,6 +203,46 @@ export function useStore() {
 
   function clearImport() { update(s => ({ ...s, importedPlan: [] })); }
 
+  function setPlanStart(date) { update(s => ({ ...s, planStart: date })); }
+
+  // Swap which meal sits on two manual days.
+  function swapDays(a, b) {
+    update(s => {
+      const mp = { ...s.manualPlan };
+      const va = mp[a], vb = mp[b];
+      if (vb === undefined) delete mp[a]; else mp[a] = vb;
+      if (va === undefined) delete mp[b]; else mp[b] = va;
+      return { ...s, manualPlan: mp };
+    });
+  }
+
+  // Swap the meal content of two imported-plan slots (weekday/date stay put).
+  function swapImported(i, j) {
+    update(s => {
+      const ip = s.importedPlan.map(e => ({ ...e }));
+      if (!ip[i] || !ip[j]) return s;
+      for (const k of ["meal", "matchedId", "special"]) {
+        const t = ip[i][k]; ip[i][k] = ip[j][k]; ip[j][k] = t;
+      }
+      return { ...s, importedPlan: ip };
+    });
+  }
+
+  // Reassign an imported-plan slot to a library meal (or a special).
+  function setImportedMeal(i, mealId) {
+    update(s => {
+      const ip = s.importedPlan.map(e => ({ ...e }));
+      if (!ip[i]) return s;
+      if (mealId === "__GRILL__" || mealId === "__LEFTOVER__") {
+        ip[i] = { ...ip[i], matchedId: null, special: true, meal: mealId === "__GRILL__" ? "Grill Out" : "Leftovers/Go Out" };
+      } else {
+        const m = s.meals.find(x => x.id === mealId);
+        ip[i] = { ...ip[i], matchedId: mealId, special: false, meal: m ? m.name : ip[i].meal };
+      }
+      return { ...s, importedPlan: ip };
+    });
+  }
+
   function setManualDay(day, mealId) {
     update(s => ({ ...s, manualPlan: { ...s.manualPlan, [day]: mealId } }));
   }
@@ -303,6 +345,7 @@ export function useStore() {
     state, syncStatus,
     addMeal, deleteMeal, addIngredient, deleteIngredient, setIngCategory, setIngredientQty,
     importPlan, clearImport, setManualDay, clearManualDay,
+    setPlanStart, swapDays, swapImported, setImportedMeal,
     addExtraItem, deleteExtra, setOverride, clearOverrides,
     toggleChecked, clearChecked, setPrice, setStore, setQtyType,
     restoreBackup, syncNow, pullNow,

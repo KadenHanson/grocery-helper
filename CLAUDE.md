@@ -40,7 +40,7 @@ All mutations funnel through `update(updater)`, which:
 ### The state shape
 
 ```
-{ meals, importedPlan, manualPlan, extraItems, groceryOverrides, checkedItems, prices, stores, qtyTypes, _meta }
+{ meals, importedPlan, manualPlan, extraItems, groceryOverrides, checkedItems, prices, stores, qtyTypes, planStart, _meta }
 ```
 - `meals` — the library: `[{id, name, ingredients:[{name, qty, unit, category}]}]`
 - `importedPlan` — a pasted/parsed week (bulk-replaced, no per-row identity)
@@ -50,7 +50,8 @@ All mutations funnel through `update(updater)`, which:
 - `checkedItems` — `{key: true}` shopping-checklist state; keys prefixed `i:`<lowercased ingredient name> or `x:`<extra id>. Unchecking deletes the key (tombstone).
 - `prices` — `{lowercased item name: number}` remembered unit prices (keyed by name so they carry across weeks); drives the estimated-total readout.
 - `stores` — `{lowercased item name: storeName}` remembered store assignment (from `STORES` in constants.js); groups the Shop view. Unset = "Unassigned".
-- `qtyTypes` — `{priceKey(name): "meal"}` quantity qualifier; absent = individual ("ind"). **Display-only** (cost stays price × qty) — shown as a subscript (`5ₘ` / `2 ind`) via `<QtyTag>`, toggled in the Meals library and grocery Manage rows.
+- `qtyTypes` — `{priceKey(name): "meal"}` quantity qualifier; absent = individual ("ind"). **Display-only** (cost stays price × qty) — shown as a small label (`meal` / `ind`) via `<QtyTag>`/`<TypeLabel>`, toggled in the Meals library and grocery Manage rows.
+- `planStart` — ISO `YYYY-MM-DD` start date for the plan week (defaults to the current week's Sunday); drives the per-day dates on the Plan tab. A versioned scalar in `_meta` (merged like `importedPlan`).
 - `_meta` — sync bookkeeping (see below); strip `_backup`/`_date` wrapper keys when importing a backup
 
 All of `meals`/`extraItems`/`manualPlan`/`groceryOverrides`/`checkedItems`/`prices`/`stores`/`qtyTypes` are the merge-tracked collections (the `KEYED` list in `merge.js`) — adding a new synced map means registering it there too.
