@@ -1,13 +1,17 @@
 # grocery-helper sync backend (Cloudflare Worker + D1)
 
-Authenticated JSON store with compare-and-swap. Same API contract as the client
-expects; `src/storage.js` needs no changes — only `VITE_SYNC_URL` points here.
+Authenticated JSON store with compare-and-swap, **multi-household**: each allowed
+secret maps to its own data namespace (keyed by a SHA-256 of the secret), so
+separate families can share one deployment with entirely separate menus. Same API
+contract as the client expects; `src/storage.js` needs no changes — only
+`VITE_SYNC_URL` points here, and the secret both authorizes and selects the dataset.
 
 Files: [`worker.js`](./worker.js), [`wrangler.toml`](./wrangler.toml), [`schema.sql`](./schema.sql).
 
 ## API
 
-All `/data` requests require `Authorization: Bearer <SYNC_SECRET>`.
+All `/data` requests require `Authorization: Bearer <secret>`, where `<secret>` is
+one of the allowed secrets in `SYNC_SECRETS`.
 
 | Method | Path    | Body                | Response |
 |--------|---------|---------------------|----------|
@@ -31,21 +35,34 @@ npx wrangler d1 create grocery-helper
 # 3. Create the table in the remote DB.
 npx wrangler d1 execute grocery-helper --remote --file=schema.sql
 
-# 4. Set the shared secret (paste the same value used in the app).
-npx wrangler secret put SYNC_SECRET
+# 4. Set the allowed secrets (comma-separated, one per household).
+printf '%s' 'household1secret,household2secret' | npx wrangler secret put SYNC_SECRETS
 
 # 5. Deploy. Prints the https://grocery-helper-sync.<subdomain>.workers.dev URL.
 npx wrangler deploy
 ```
 
 Visit the printed URL — it should say "grocery-helper sync backend is running."
-Visit `/data` — it should return `{"error":"unauthorized"}` (confirms the secret is set).
+Visit `/data` — it should return `{"error":"unauthorized"}` (confirms secrets are set).
+
+## Adding a household
+
+Give the new household its own long random secret, then re-set `SYNC_SECRETS` with
+it appended (secret put overwrites, so include the existing ones too):
+
+```bash
+printf '%s' 'existingSecretA,existingSecretB,newHouseholdSecret' | npx wrangler secret put SYNC_SECRETS
+```
+
+They enter their secret in the app (Settings → Cloud sync) and get a fresh, empty
+dataset — no redeploy needed (env changes take effect immediately).
 
 ## Wire up the frontend
 
 Set the GitHub repo variable **`VITE_SYNC_URL`** (Settings → Secrets and variables
 → Actions → Variables) to the `*.workers.dev` URL (no trailing slash), then re-run
-the Pages deploy. Enter the same `SYNC_SECRET` in the app (Settings → Cloud sync).
+the Pages deploy. Each person enters their household's secret in the app (Settings →
+Cloud sync).
 
 ## Local dev
 
