@@ -24,6 +24,7 @@ export default function MealsTab({ meals, addMeal, deleteMeal, addIngredient, de
     return (
       <input type="number" inputMode="decimal" step="0.01" min="0" placeholder="$"
         defaultValue={stored ?? ""} key={priceKey(name) + ":" + (stored ?? "")}
+        onFocus={e => e.target.select()}
         onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
         onBlur={e => { const v = e.target.value.trim(); if (String(v) !== String(stored ?? "")) setPrice(name, v); }}
         style={{ width: 54, background: "var(--input-bg)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--muted)", fontSize: 11, padding: "3px 6px", outline: "none", textAlign: "right" }} />
@@ -39,9 +40,14 @@ export default function MealsTab({ meals, addMeal, deleteMeal, addIngredient, de
 
   function handleAddIng(mealId) {
     const d = ingDraft[mealId] || {};
-    if (!d.name?.trim()) return;
-    addIngredient(mealId, d.name.trim(), parseFloat(d.qty) || 1, d.unit?.trim() || "");
-    setIngDraft(p => ({ ...p, [mealId]: { name:"", qty:"", unit:"" } }));
+    const name = d.name?.trim();
+    if (!name) return;
+    const meal = meals.find(m => m.id === mealId);
+    const idx = meal ? meal.ingredients.length : 0; // the new ingredient's index
+    addIngredient(mealId, name, parseFloat(d.qty) || 1, "");
+    if (d.category) setIngCategory(mealId, idx, d.category);
+    if (d.price) setPrice(name, d.price);
+    setIngDraft(p => ({ ...p, [mealId]: { name:"", qty:"", category:"", price:"" } }));
   }
 
   function setDraft(mealId, key, val) {
@@ -98,37 +104,43 @@ export default function MealsTab({ meals, addMeal, deleteMeal, addIngredient, de
                   <div key={idx} style={{ padding:"8px 0", borderBottom:"1px solid var(--border-soft)" }}>
                     <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                       <span style={{ flex:1, fontSize:13, color:"var(--text-2)", minWidth:60 }}>{ing.name}</span>
-                      <input type="number" inputMode="decimal" min="0" step="1"
-                        defaultValue={ing.qty} key={"q:" + meal.id + ":" + idx + ":" + ing.qty}
-                        onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
-                        onBlur={e => { const v = parseFloat(e.target.value) || 1; if (v !== ing.qty) setIngredientQty(meal.id, idx, v); }}
-                        style={{ width:42, background:"var(--input-bg)", border:"1px solid var(--border)", borderRadius:6, color:"var(--text-2)", fontSize:12, padding:"3px 4px", outline:"none", textAlign:"center" }} />
-                      <TypeLabel type={qtyTypeOf(ing.name)} onToggle={() => toggleQtyType(ing.name)} />
-                      {priceCell(ing.name)}
+                      <select value={ing.category || guessCategory(ing.name)}
+                        onChange={e => setIngCategory(meal.id, idx, e.target.value)}
+                        style={{ background:"var(--input-bg)", border:"1px solid var(--border)", borderRadius:6, color:"var(--faint)", fontSize:11, padding:"2px 6px", outline:"none", maxWidth:150 }}>
+                        {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
                       <button onClick={() => deleteIngredient(meal.id, idx)}
                         style={{ background:"none", border:"none", cursor:"pointer", color:"var(--danger)", fontSize:16, padding:"2px 4px" }}>✕</button>
                     </div>
-                    <div style={{ display:"flex", justifyContent:"flex-end", marginTop:4 }}>
-                      <select value={ing.category || guessCategory(ing.name)}
-                        onChange={e => setIngCategory(meal.id, idx, e.target.value)}
-                        style={{ background:"var(--input-bg)", border:"1px solid var(--border)", borderRadius:6, color:"var(--faint)", fontSize:11, padding:"2px 6px", outline:"none" }}>
-                        {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", gap:6, marginTop:6 }}>
+                      <input type="number" inputMode="decimal" min="0" step="1"
+                        defaultValue={ing.qty} key={"q:" + meal.id + ":" + idx + ":" + ing.qty}
+                        onFocus={e => e.target.select()}
+                        onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                        onBlur={e => { const v = parseFloat(e.target.value) || 1; if (v !== ing.qty) setIngredientQty(meal.id, idx, v); }}
+                        style={{ width:44, background:"var(--input-bg)", border:"1px solid var(--border)", borderRadius:6, color:"var(--text-2)", fontSize:12, padding:"3px 4px", outline:"none", textAlign:"center" }} />
+                      <TypeLabel type={qtyTypeOf(ing.name)} onToggle={() => toggleQtyType(ing.name)} />
+                      {priceCell(ing.name)}
                     </div>
                   </div>
                 ))}
 
                 <div style={{ marginTop:12 }}>
                   <Label>Add ingredient</Label>
-                  <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                  <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
                     <Input value={d.name||""} onChange={e => setDraft(meal.id,"name",e.target.value)}
                       onKeyDown={e => e.key === "Enter" && handleAddIng(meal.id)}
-                      placeholder="Name" style={{ flex:2, minWidth:100 }} />
+                      placeholder="Name" style={{ flex:2, minWidth:110 }} />
                     <Input value={d.qty||""} onChange={e => setDraft(meal.id,"qty",e.target.value)}
-                      type="number" placeholder="Qty" style={{ width:60 }} />
-                    <Input value={d.unit||""} onChange={e => setDraft(meal.id,"unit",e.target.value)}
+                      type="number" placeholder="Qty" style={{ width:56 }} />
+                    <select value={d.category||""} onChange={e => setDraft(meal.id,"category",e.target.value)}
+                      style={{ background:"var(--input-bg)", border:"1px solid var(--border)", borderRadius:8, color:"var(--faint)", fontSize:12, padding:"8px 6px", outline:"none" }}>
+                      <option value="">Category…</option>
+                      {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <Input value={d.price||""} onChange={e => setDraft(meal.id,"price",e.target.value)}
                       onKeyDown={e => e.key === "Enter" && handleAddIng(meal.id)}
-                      placeholder="Unit" style={{ width:80 }} />
+                      type="number" placeholder="$" style={{ width:60 }} />
                     <Btn variant="primary" onClick={() => handleAddIng(meal.id)}>Add</Btn>
                   </div>
                 </div>

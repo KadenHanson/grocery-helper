@@ -135,6 +135,7 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
       <input type="number" inputMode="decimal" step="0.01" min="0" placeholder="$"
         defaultValue={stored ?? ""} key={(name || "").toLowerCase() + ":" + (stored ?? "")}
         onClick={e => e.stopPropagation()}
+        onFocus={e => e.target.select()}
         onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
         onBlur={e => { const v = e.target.value.trim(); if (String(v) !== String(stored ?? "")) setPrice(name, v); }}
         style={priceInputStyle} />

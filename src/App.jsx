@@ -51,12 +51,13 @@ export default function App() {
         {iconBtn(showSettings, () => setShowSettings(p => !p), "⚙️", "Settings")}
       </nav>
 
-      {/* Sync indicator */}
+      {/* Sync indicator — fixed floating pill so it never shifts the page. */}
       {store.syncStatus !== "idle" && (
-        <div style={{ textAlign:"center", padding:"4px 0", fontSize:11, fontWeight:600,
-          color: { saving:"var(--faint)", saved:"var(--accent)", error:"var(--danger)" }[store.syncStatus],
-          background:"var(--surface)", borderBottom:"1px solid var(--border-soft)" }}>
-          {{ saving:"Syncing…", saved:"Saved to cloud ✓", error:"Cloud sync failed — data saved locally" }[store.syncStatus]}
+        <div style={{ position:"fixed", bottom:20, left:"50%", transform:"translateX(-50%)", zIndex:30,
+          padding:"6px 14px", borderRadius:20, fontSize:11, fontWeight:600, whiteSpace:"nowrap", pointerEvents:"none",
+          background:"var(--surface)", border:"1px solid var(--border)", boxShadow:"0 4px 14px rgba(0,0,0,0.3)",
+          color: { saving:"var(--faint)", saved:"var(--accent)", error:"var(--danger)" }[store.syncStatus] }}>
+          {{ saving:"Syncing…", saved:"Saved to cloud ✓", error:"Cloud sync failed — saved locally" }[store.syncStatus]}
         </div>
       )}
 
