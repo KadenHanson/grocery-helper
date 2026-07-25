@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { CATEGORIES, guessCategory, priceKey } from "../constants";
-import { Card, Btn, Input, Label, Badge, EmptyState, TypeLabel } from "./UI";
+import { Card, Btn, Input, Label, Badge, EmptyState, TypeLabel, Autocomplete } from "./UI";
 
 export default function MealsTab({ meals, addMeal, deleteMeal, addIngredient, deleteIngredient, setIngCategory, setIngredientQty, prices, setPrice, qtyTypes, setQtyType }) {
   const [expanded, setExpanded] = useState(null);
@@ -13,6 +13,12 @@ export default function MealsTab({ meals, addMeal, deleteMeal, addIngredient, de
   const qtyMap = qtyTypes || {};
   const qtyTypeOf = (name) => qtyMap[priceKey(name)] === "meal" ? "meal" : "ind";
   const toggleQtyType = (name) => setQtyType(name, qtyTypeOf(name) === "meal" ? "ind" : "meal");
+
+  // Suggestions for the ingredient autocomplete: every distinct ingredient name
+  // across the library, with a lookup for its remembered category.
+  const ingredientNames = [...new Set(meals.flatMap(m => (m.ingredients || []).map(i => i.name)))].sort((a, b) => a.localeCompare(b));
+  const catIndex = {};
+  meals.forEach(m => (m.ingredients || []).forEach(i => { catIndex[i.name.toLowerCase()] = i.category || guessCategory(i.name); }));
   const mealCost = (m) => (m.ingredients || []).reduce((s, ing) => s + (priceOf(ing.name) || 0) * (ing.qty || 1), 0);
   const costed = meals.map(mealCost).filter(c => c > 0);
   const avgCost = costed.length ? costed.reduce((a, b) => a + b, 0) / costed.length : 0;
@@ -128,9 +134,15 @@ export default function MealsTab({ meals, addMeal, deleteMeal, addIngredient, de
                 <div style={{ marginTop:12 }}>
                   <Label>Add ingredient</Label>
                   <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
-                    <Input value={d.name||""} onChange={e => setDraft(meal.id,"name",e.target.value)}
-                      onKeyDown={e => e.key === "Enter" && handleAddIng(meal.id)}
-                      placeholder="Name" style={{ flex:2, minWidth:110 }} />
+                    <Autocomplete value={d.name || ""} options={ingredientNames}
+                      wrapperStyle={{ flex:2, minWidth:110 }} placeholder="Name"
+                      onChange={v => setDraft(meal.id, "name", v)}
+                      onSelect={v => {
+                        setDraft(meal.id, "name", v);
+                        const c = catIndex[v.toLowerCase()]; if (c) setDraft(meal.id, "category", c);
+                        const p = priceOf(v); if (p != null) setDraft(meal.id, "price", String(p));
+                      }}
+                      onEnter={() => handleAddIng(meal.id)} />
                     <Input value={d.qty||""} onChange={e => setDraft(meal.id,"qty",e.target.value)}
                       type="number" placeholder="Qty" style={{ width:56 }} />
                     <select value={d.category||""} onChange={e => setDraft(meal.id,"category",e.target.value)}

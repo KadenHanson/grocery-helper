@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { DAYS, DAY_NAMES, WEEKDAY_TO_SHORT, SPECIAL_OPTS } from "../constants";
+import { DAYS, DAY_NAMES, WEEKDAY_TO_SHORT, SPECIAL_OPTS, priceKey } from "../constants";
 import { Btn, BtnSm, Input, Label, Badge, EmptyState, Block } from "./UI";
 
 export default function PlanTab({ state, importPlan, clearImport, setManualDay, clearManualDay }) {
@@ -40,12 +40,28 @@ export default function PlanTab({ state, importPlan, clearImport, setManualDay, 
   const filtered = all.filter(m => m.name.toLowerCase().includes(search.toLowerCase()));
   const unmatched = importedPlan.filter(e => !e.special && !e.matchedId);
 
+  const prices = state.prices || {};
+  const priceOf = (name) => prices[priceKey(name)];
+  const mealCost = (m) => (m?.ingredients || []).reduce((s, ing) => s + (priceOf(ing.name) || 0) * (ing.qty || 1), 0);
+  const plannedMeals = [];
+  importedPlan.forEach(e => { if (!e.special && e.matchedId) { const m = meals.find(x => x.id === e.matchedId); if (m) plannedMeals.push(m); } });
+  DAYS.forEach(d => { const id = manualPlan[d]; if (id && id !== "__GRILL__" && id !== "__LEFTOVER__") { const m = meals.find(x => x.id === id); if (m) plannedMeals.push(m); } });
+  const weeklyTotal = plannedMeals.reduce((s, m) => s + mealCost(m), 0);
+
   const rowStyle = { display:"flex", alignItems:"flex-start", gap:8, padding:"9px 14px", borderTop:"1px solid var(--border-soft)" };
 
   return (
     <div>
       <h1 style={{ fontSize:22, fontWeight:700, letterSpacing:"-0.03em", color:"var(--heading)", margin:"16px 0 4px" }}>Weekly Plan</h1>
-      <p style={{ fontSize:13, color:"var(--faint)", marginBottom:20 }}>Import your plan JSON or assign meals manually</p>
+      <p style={{ fontSize:13, color:"var(--faint)", marginBottom:16 }}>Import your plan JSON or assign meals manually</p>
+
+      {plannedMeals.length > 0 && weeklyTotal > 0 && (
+        <div style={{ display:"flex", alignItems:"baseline", gap:10, marginBottom:18, padding:"11px 14px", background:"var(--inset)", border:"1px solid var(--border-soft)", borderRadius:10 }}>
+          <span style={{ fontSize:12, color:"var(--muted)" }}>Est. plan cost</span>
+          <span style={{ fontSize:19, fontWeight:700, color:"var(--heading)" }}>${weeklyTotal.toFixed(2)}</span>
+          <span style={{ fontSize:11, color:"var(--faint)", marginLeft:"auto" }}>{plannedMeals.length} meal{plannedMeals.length !== 1 ? "s" : ""}</span>
+        </div>
+      )}
 
       {/* Import */}
       <Block>
@@ -92,6 +108,7 @@ export default function PlanTab({ state, importPlan, clearImport, setManualDay, 
                 <div key={i} style={rowStyle}>
                   <span style={{ fontWeight:700, fontSize:12, color:"var(--faint)", width:34, paddingTop:2, flexShrink:0 }}>{dayShort}—</span>
                   <span style={{ flex:1, fontSize:13, color, fontStyle: entry.special ? "italic" : "normal" }}>{entry.meal}</span>
+                  {libMeal && mealCost(libMeal) > 0 && <span style={{ fontSize:12, color:"var(--muted)", marginRight:6, alignSelf:"center" }}>${mealCost(libMeal).toFixed(2)}</span>}
                   {!entry.special && entry.matchedId && <Badge>{libMeal?.ingredients.length || 0} ing</Badge>}
                   {!entry.special && !entry.matchedId && <Badge warn>no match</Badge>}
                 </div>
@@ -137,10 +154,13 @@ export default function PlanTab({ state, importPlan, clearImport, setManualDay, 
         {DAYS.map((d, i) => {
           const id = manualPlan[d];
           const name = id ? getMealName(id) : null;
+          const m = id && id !== "__GRILL__" && id !== "__LEFTOVER__" ? meals.find(x => x.id === id) : null;
+          const c = m ? mealCost(m) : 0;
           return (
             <div key={d} style={{ ...rowStyle, borderTop: i === 0 ? "none" : "1px solid var(--border-soft)" }}>
               <span style={{ fontWeight:700, fontSize:12, color:"var(--faint)", width:34, paddingTop:2, flexShrink:0 }}>{d}—</span>
               <span style={{ flex:1, fontSize:13, color: name ? "var(--text-2)" : "var(--ghost)", fontStyle: name ? "normal" : "italic" }}>{name || "not set"}</span>
+              {c > 0 && <span style={{ fontSize:12, color:"var(--muted)", marginRight:6, alignSelf:"center" }}>${c.toFixed(2)}</span>}
               {id && <button onClick={() => clearManualDay(d)} style={{ background:"none", border:"none", cursor:"pointer", color:"var(--ghost)", fontSize:16, padding:"2px 4px" }}>✕</button>}
             </div>
           );

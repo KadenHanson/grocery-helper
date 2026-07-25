@@ -1,3 +1,34 @@
+import { useState } from "react";
+
+// Text input with a fuzzy (substring) suggestion dropdown. onChange fires on
+// every keystroke; onSelect fires when a suggestion is picked (use it to
+// autofill related fields); onEnter fires on the Enter key.
+export function Autocomplete({ value, onChange, onSelect, options, placeholder, autoFocus, onEnter, wrapperStyle }) {
+  const [open, setOpen] = useState(false);
+  const q = (value || "").trim().toLowerCase();
+  const matches = q ? options.filter(o => { const l = o.toLowerCase(); return l.includes(q) && l !== q; }).slice(0, 8) : [];
+  return (
+    <div style={{ position:"relative", ...wrapperStyle }}>
+      <input type="text" value={value} autoFocus={autoFocus} placeholder={placeholder}
+        onChange={e => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 120)}
+        onKeyDown={e => { if (e.key === "Enter") { setOpen(false); onEnter && onEnter(); } if (e.key === "Escape") setOpen(false); }}
+        style={{ background:"var(--input-bg)", border:"1px solid var(--border)", borderRadius:8, color:"var(--text)", fontSize:13, padding:"9px 12px", outline:"none", width:"100%", fontFamily:"inherit" }} />
+      {open && matches.length > 0 && (
+        <div style={{ position:"absolute", top:"calc(100% + 4px)", left:0, right:0, zIndex:40, background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, boxShadow:"0 8px 20px rgba(0,0,0,0.35)", overflow:"hidden", maxHeight:220, overflowY:"auto" }}>
+          {matches.map(m => (
+            <div key={m} onMouseDown={e => { e.preventDefault(); onSelect(m); setOpen(false); }}
+              style={{ padding:"8px 12px", fontSize:13, color:"var(--text-2)", cursor:"pointer", borderBottom:"1px solid var(--border-soft)" }}>
+              {m}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Card({ children, style }) {
   return <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:12, marginBottom:10, overflow:"hidden", ...style }}>{children}</div>;
 }
@@ -16,10 +47,10 @@ export function BtnSm({ children, onClick, variant, style }) {
   return <Btn onClick={onClick} variant={variant} style={{ padding:"6px 12px", fontSize:12, ...style }}>{children}</Btn>;
 }
 
-export function Input({ value, onChange, onKeyDown, placeholder, type, style, id, autoFocus }) {
+export function Input({ value, onChange, onKeyDown, onFocus, placeholder, type, style, id, autoFocus, list }) {
   return (
-    <input id={id} type={type||"text"} value={value} onChange={onChange} onKeyDown={onKeyDown}
-      placeholder={placeholder} autoFocus={autoFocus}
+    <input id={id} type={type||"text"} value={value} onChange={onChange} onKeyDown={onKeyDown} onFocus={onFocus}
+      placeholder={placeholder} autoFocus={autoFocus} list={list}
       style={{ background:"var(--input-bg)", border:"1px solid var(--border)", borderRadius:8, color:"var(--text)", fontSize:13, padding:"9px 12px", outline:"none", width:"100%", fontFamily:"inherit", ...style }} />
   );
 }
