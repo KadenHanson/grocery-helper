@@ -9,12 +9,20 @@ function readBool(key, def) {
 }
 
 // Tap-to-swap + pointer drag-to-swap over rows tagged with data-swapkey.
+// onSwap fires exactly once per gesture (never inside a state updater), and a
+// short guard swallows the synthetic click browsers fire right after a drag —
+// otherwise the swap would run twice and appear to "swap back".
 function useSwap(onSwap) {
   const [selected, setSelected] = useState(null);
   const [overKey, setOverKey] = useState(null);
-  const dragging = useRef(false);
+  const guard = useRef(false);
   function tap(key) {
-    setSelected(sel => { if (sel == null) return key; if (sel === key) return null; onSwap(sel, key); return null; });
+    if (guard.current) return;
+    if (selected == null) { setSelected(key); return; }
+    if (selected === key) { setSelected(null); return; }
+    const from = selected;
+    setSelected(null);
+    onSwap(from, key);
   }
   function keyAt(x, y) {
     const el = document.elementFromPoint(x, y);
@@ -24,16 +32,17 @@ function useSwap(onSwap) {
   function startDrag(key) {
     return (e) => {
       e.preventDefault();
-      dragging.current = true;
+      setSelected(null);
       setOverKey(key);
       const move = (ev) => setOverKey(keyAt(ev.clientX, ev.clientY));
       const up = (ev) => {
         const target = keyAt(ev.clientX, ev.clientY);
-        if (target && target !== key) onSwap(key, target);
-        dragging.current = false;
-        setOverKey(null);
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", up);
+        setOverKey(null);
+        guard.current = true;
+        setTimeout(() => { guard.current = false; }, 350);
+        if (target && target !== key) onSwap(key, target);
       };
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", up);
