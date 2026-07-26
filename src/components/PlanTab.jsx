@@ -90,6 +90,14 @@ export default function PlanTab({ state, importPlan, clearImport, setManualDay, 
     const dt = new Date(y, m - 1, d + offset);
     return dt.toLocaleDateString("en-US", { month: "numeric", day: "numeric" });
   }
+  // Imported entries carry their own real date (MM/DD/YYYY) that spans weeks
+  // correctly — prefer it over the single-week weekday offset, which collapses
+  // every Saturday (etc.) onto the same date.
+  function importedDate(entry, fallbackOffset) {
+    const parts = (entry.date || "").split("/");
+    if (parts.length === 3) return `${Number(parts[0])}/${Number(parts[1])}`;
+    return dateLabel(fallbackOffset);
+  }
 
   function handleFile(e) {
     const file = e.target.files[0]; if (!file) return;
@@ -222,13 +230,13 @@ export default function PlanTab({ state, importPlan, clearImport, setManualDay, 
               const off = WD_OFFSET[entry.weekday] ?? i;
               const short = WEEKDAY_TO_SHORT[entry.weekday] || (entry.weekday || "").slice(0,2);
               const libMeal = entry.matchedId ? meals.find(m => m.id === entry.matchedId) : null;
-              const color = entry.special ? "var(--faint)" : !entry.matchedId ? "var(--warn)" : "var(--text-2)";
+              const color = entry.special ? "var(--text-2)" : !entry.matchedId ? "var(--warn)" : "var(--text-2)";
               return (
                 <div key={i} data-swapkey={key} style={{ ...rowStyle, borderTop: i === 0 ? "none" : rowStyle.borderTop, background: rowBg(key, importedSwap), cursor: editMode ? "pointer" : "default" }}
                   onClick={editMode ? () => importedSwap.tap(key) : undefined}>
                   {editMode && <span style={handleStyle} onPointerDown={importedSwap.startDrag(key)}>⠿</span>}
                   <span style={dayStyle}>{short}</span>
-                  <span style={dateStyle}>{dateLabel(off)}</span>
+                  <span style={dateStyle}>{importedDate(entry, off)}</span>
                   <span style={{ flex:1, fontSize:13, color, fontStyle: entry.special ? "italic" : "normal" }}>{entry.meal}</span>
                   {libMeal && mealCost(libMeal) > 0 && <span style={{ fontSize:12, color:"var(--muted)" }}>${mealCost(libMeal).toFixed(2)}</span>}
                   {!editMode && !entry.special && entry.matchedId && <Badge>{libMeal?.ingredients.length || 0} ing</Badge>}

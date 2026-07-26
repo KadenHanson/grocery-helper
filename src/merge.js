@@ -36,16 +36,28 @@ export function emptyMeta() {
   };
 }
 
+// Absurd-future timestamps can never be beaten by a real edit (a fresh Date.now
+// is always smaller), so they freeze whatever they're attached to. That's not
+// hypothetical — the data-recovery script deliberately wrote year-2100 stamps to
+// force a restore to win, and those stamps then made every later edit revert.
+// Clamp anything more than a year ahead back to 0 (tie-to-cloud, same as legacy
+// meta-less docs) so it heals on the next load/merge. A year of slack keeps
+// honest clock skew (seconds/minutes) safe.
+const clampFuture = (limit) => (v) => (v > limit ? 0 : v || 0);
+
 // Guarantee a well-formed `_meta` on a state (legacy docs get all-zero stamps).
 export function normalizeMeta(state) {
   const src = state._meta || {};
   const meta = emptyMeta();
+  const clamp = clampFuture(now() + 366 * 24 * 60 * 60 * 1000);
   for (const coll of KEYED) {
-    meta[coll] = { ...(src[coll] || {}) };
-    meta.del[coll] = { ...((src.del && src.del[coll]) || {}) };
+    const s = src[coll] || {};
+    const d = (src.del && src.del[coll]) || {};
+    for (const k of Object.keys(s)) meta[coll][k] = clamp(s[k]);
+    for (const k of Object.keys(d)) meta.del[coll][k] = clamp(d[k]);
   }
-  meta.importedPlan = src.importedPlan || 0;
-  meta.planStart = src.planStart || 0;
+  meta.importedPlan = clamp(src.importedPlan);
+  meta.planStart = clamp(src.planStart);
   return { ...state, _meta: meta };
 }
 
