@@ -63,6 +63,17 @@ async function currentRow(env, tenant, origin, status) {
   );
 }
 
+// Auth + household selection shared by every /data* route.
+// Returns { tenant } on success, or { error: Response } to return verbatim.
+async function resolveHousehold(request, env, origin) {
+  if (!allowedSecrets(env).length) {
+    return { error: json({ error: "server misconfigured: no SYNC_SECRETS set" }, 500, origin) };
+  }
+  const secret = matchSecret(request, env);
+  if (!secret) return { error: json({ error: "unauthorized" }, 401, origin) };
+  return { tenant: await tenantId(secret) };
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -78,13 +89,24 @@ export default {
       });
     }
 
+    // Read-only convenience route: returns the stored plan already shaped like
+    // the app's "Paste JSON" import ({ dinner: [{date, weekday, meal}] }), so a
+    // caller (e.g. an iOS Scriptable script) doesn't reimplement the mapping.
+    if (url.pathname === "/data/get-import-plan" && request.method === "GET") {
+      const { tenant, error } = await resolveHousehold(request, env, origin);
+      if (error) return error;
+      const row = await env.DB.prepare("SELECT data FROM households WHERE secret_hash = ?").bind(tenant).first();
+      const state = row ? JSON.parse(row.data) : null;
+      const imported = Array.isArray(state?.importedPlan) ? state.importedPlan : [];
+      const dinner = imported
+        .filter(e => e && (e.meal || e.name))
+        .map(e => ({ date: e.date || "", weekday: e.weekday || "", meal: e.meal || e.name }));
+      return json({ dinner }, 200, origin);
+    }
+
     if (url.pathname === "/data") {
-      if (!allowedSecrets(env).length) {
-        return json({ error: "server misconfigured: no SYNC_SECRETS set" }, 500, origin);
-      }
-      const secret = matchSecret(request, env);
-      if (!secret) return json({ error: "unauthorized" }, 401, origin);
-      const tenant = await tenantId(secret);
+      const { tenant, error } = await resolveHousehold(request, env, origin);
+      if (error) return error;
 
       if (request.method === "GET") {
         return currentRow(env, tenant, origin, 200);
