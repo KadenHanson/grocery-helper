@@ -1,12 +1,75 @@
 import { useState } from "react";
 import { CATEGORIES, guessCategory, priceKey } from "../constants";
 import { Card, Btn, Input, Label, Badge, EmptyState, TypeLabel, Autocomplete } from "./UI";
+import { fetchRecipe } from "../storage";
+import { parseRecipe } from "../recipe";
 
-export default function MealsTab({ meals, addMeal, deleteMeal, addIngredient, deleteIngredient, setIngCategory, setIngredientQty, prices, setPrice, qtyTypes, setQtyType }) {
+export default function MealsTab({ meals, addMeal, importMeal, setMealRecipe, cloudReady, deleteMeal, addIngredient, deleteIngredient, setIngCategory, setIngredientQty, prices, setPrice, qtyTypes, setQtyType }) {
   const [expanded, setExpanded] = useState(null);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [ingDraft, setIngDraft] = useState({});
+
+  // Recipe import flow
+  const [importOpen, setImportOpen] = useState(false);
+  const [importUrl, setImportUrl] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+  const [confirm, setConfirm] = useState(null); // { name, sourceUrl, recipeText, rows:[{name,qty,unit,category,include}] }
+  const [snapOpen, setSnapOpen] = useState(false); // confirm-screen snapshot toggle
+
+  // Per-meal recipe reference (attach/edit on any meal)
+  const [recipeEditId, setRecipeEditId] = useState(null);
+  const [recipeDraft, setRecipeDraft] = useState({ text: "", url: "" });
+  const [recipeShownId, setRecipeShownId] = useState(null); // read-only snapshot toggle
+
+  async function runImport() {
+    const url = importUrl.trim();
+    if (!url) return;
+    setImporting(true); setImportError("");
+    const res = await fetchRecipe(url);
+    setImporting(false);
+    if (!res || res.error) { setImportError((res && res.error) || "Couldn't read that recipe."); return; }
+    const parsed = parseRecipe(res);
+    setConfirm({
+      name: parsed.name,
+      sourceUrl: parsed.sourceUrl,
+      recipeText: parsed.recipeText,
+      rows: parsed.ingredients.map(i => ({ ...i, include: true })),
+    });
+    setSnapOpen(false);
+    setImportOpen(false); setImportUrl("");
+  }
+
+  function setRow(idx, patch) {
+    setConfirm(c => ({ ...c, rows: c.rows.map((r, i) => i === idx ? { ...r, ...patch } : r) }));
+  }
+
+  function saveImport() {
+    const rows = confirm.rows.filter(r => r.include && r.name.trim());
+    const id = importMeal({
+      name: confirm.name.trim() || "Untitled meal",
+      ingredients: rows.map(r => ({
+        name: r.name.trim(),
+        qty: parseFloat(r.qty) || 1,
+        unit: r.unit || "",
+        category: r.category || guessCategory(r.name),
+      })),
+      recipeText: confirm.recipeText,
+      sourceUrl: confirm.sourceUrl,
+    });
+    setConfirm(null);
+    setExpanded(id);
+  }
+
+  function openRecipeEditor(meal) {
+    setRecipeEditId(meal.id);
+    setRecipeDraft({ text: meal.recipeText || "", url: meal.sourceUrl || "" });
+  }
+  function saveRecipeEditor(mealId) {
+    setMealRecipe(mealId, { recipeText: recipeDraft.text.trim(), sourceUrl: recipeDraft.url.trim() });
+    setRecipeEditId(null);
+  }
 
   const priceMap = prices || {};
   const priceOf = (name) => priceMap[priceKey(name)];
@@ -67,8 +130,72 @@ export default function MealsTab({ meals, addMeal, deleteMeal, addIngredient, de
           <h1 style={{ fontSize:22, fontWeight:700, letterSpacing:"-0.03em", color:"var(--heading)", margin:"16px 0 4px" }}>Meal Library</h1>
           <p style={{ fontSize:13, color:"var(--faint)", marginBottom:0 }}>{meals.length} meals{avgCost ? ` · avg $${avgCost.toFixed(2)}/meal` : ""} · tap to manage</p>
         </div>
-        <Btn variant="primary" onClick={() => setAdding(true)}>+ Add</Btn>
+        <div style={{ display:"flex", gap:8 }}>
+          {cloudReady && (
+            <Btn onClick={() => { setImportOpen(o => !o); setImportError(""); }}>Import URL</Btn>
+          )}
+          <Btn variant="primary" onClick={() => setAdding(true)}>+ Add</Btn>
+        </div>
       </div>
+
+      {importOpen && !confirm && (
+        <Card style={{ padding:14, marginBottom:12 }}>
+          <Label>Import from a recipe URL</Label>
+          <div style={{ display:"flex", gap:8, marginBottom:8 }}>
+            <Input value={importUrl} onChange={e => setImportUrl(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && !importing && runImport()}
+              placeholder="https://…" autoFocus />
+          </div>
+          {importError && <p style={{ fontSize:12, color:"var(--danger)", margin:"0 0 8px" }}>{importError}</p>}
+          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+            <Btn variant="primary" onClick={runImport}>{importing ? "Reading…" : "Import"}</Btn>
+            <Btn onClick={() => { setImportOpen(false); setImportUrl(""); setImportError(""); }}>Cancel</Btn>
+          </div>
+        </Card>
+      )}
+
+      {confirm && (
+        <Card style={{ padding:14, marginBottom:12 }}>
+          <Label>Review imported meal</Label>
+          <Input value={confirm.name} onChange={e => setConfirm(c => ({ ...c, name: e.target.value }))}
+            placeholder="Meal name" style={{ marginBottom:10 }} />
+
+          {confirm.rows.length === 0 && <EmptyState style={{ padding:"12px 0" }}>No ingredients found — you can still save and add them manually.</EmptyState>}
+
+          {confirm.rows.map((r, idx) => (
+            <div key={idx} style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 0", borderBottom:"1px solid var(--border-soft)", opacity: r.include ? 1 : 0.4 }}>
+              <input type="checkbox" checked={r.include} onChange={e => setRow(idx, { include: e.target.checked })}
+                style={{ width:16, height:16, flexShrink:0 }} />
+              <input type="number" inputMode="decimal" min="0" step="1" value={r.qty}
+                onChange={e => setRow(idx, { qty: e.target.value })}
+                style={{ width:44, background:"var(--input-bg)", border:"1px solid var(--border)", borderRadius:6, color:"var(--text-2)", fontSize:12, padding:"3px 4px", outline:"none", textAlign:"center" }} />
+              <input type="text" value={r.name} onChange={e => setRow(idx, { name: e.target.value })}
+                style={{ flex:1, minWidth:60, background:"var(--input-bg)", border:"1px solid var(--border)", borderRadius:6, color:"var(--text-2)", fontSize:13, padding:"5px 8px", outline:"none" }} />
+              <select value={r.category || guessCategory(r.name)} onChange={e => setRow(idx, { category: e.target.value })}
+                style={{ background:"var(--input-bg)", border:"1px solid var(--border)", borderRadius:6, color:"var(--faint)", fontSize:11, padding:"3px 6px", outline:"none", maxWidth:110 }}>
+                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          ))}
+
+          {confirm.recipeText && (
+            <div style={{ marginTop:10 }}>
+              <button onClick={() => setSnapOpen(o => !o)}
+                style={{ background:"none", border:"none", cursor:"pointer", color:"var(--faint)", fontSize:12, padding:0 }}>
+                {snapOpen ? "▾" : "▸"} Original recipe
+              </button>
+              {snapOpen && (
+                <pre style={{ whiteSpace:"pre-wrap", wordBreak:"break-word", fontFamily:"inherit", fontSize:12, color:"var(--text-2)", background:"var(--inset)", border:"1px solid var(--border-soft)", borderRadius:8, padding:10, marginTop:6, maxHeight:220, overflowY:"auto" }}>{confirm.recipeText}</pre>
+              )}
+            </div>
+          )}
+
+          <div style={{ display:"flex", gap:8, marginTop:12 }}>
+            <Btn variant="primary" onClick={saveImport}>Save meal</Btn>
+            <Btn onClick={() => setConfirm(null)}>Cancel</Btn>
+          </div>
+        </Card>
+      )}
 
       {adding && (
         <Card style={{ padding:14, marginBottom:12 }}>
@@ -156,6 +283,43 @@ export default function MealsTab({ meals, addMeal, deleteMeal, addIngredient, de
                     <Btn variant="primary" onClick={() => handleAddIng(meal.id)}>Add</Btn>
                   </div>
                 </div>
+
+                {recipeEditId === meal.id ? (
+                  <div style={{ marginTop:12, borderTop:"1px solid var(--border-soft)", paddingTop:12 }}>
+                    <Label>Recipe</Label>
+                    <Input value={recipeDraft.url} onChange={e => setRecipeDraft(d => ({ ...d, url: e.target.value }))}
+                      placeholder="Recipe URL (https://…)" style={{ marginBottom:8 }} />
+                    <textarea value={recipeDraft.text} onChange={e => setRecipeDraft(d => ({ ...d, text: e.target.value }))}
+                      placeholder="Paste or type the recipe to reference later…" rows={6}
+                      style={{ width:"100%", boxSizing:"border-box", background:"var(--input-bg)", border:"1px solid var(--border)", borderRadius:8, color:"var(--text)", fontSize:13, padding:"9px 12px", outline:"none", fontFamily:"inherit", resize:"vertical" }} />
+                    <div style={{ display:"flex", gap:8, marginTop:8 }}>
+                      <Btn variant="primary" onClick={() => saveRecipeEditor(meal.id)}>Save</Btn>
+                      <Btn onClick={() => setRecipeEditId(null)}>Cancel</Btn>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ marginTop:12, borderTop:"1px solid var(--border-soft)", paddingTop:12, display:"flex", flexWrap:"wrap", gap:12, alignItems:"center" }}>
+                    {meal.sourceUrl && (
+                      <a href={meal.sourceUrl} target="_blank" rel="noopener noreferrer"
+                        style={{ textDecoration:"none", padding:"6px 12px", borderRadius:8, fontWeight:600, fontSize:12, background:"var(--btn-bg)", color:"var(--muted)" }}>
+                        Open recipe ↗
+                      </a>
+                    )}
+                    {meal.recipeText && (
+                      <button onClick={() => setRecipeShownId(id => id === meal.id ? null : meal.id)}
+                        style={{ background:"none", border:"none", cursor:"pointer", color:"var(--faint)", fontSize:12, padding:0 }}>
+                        {recipeShownId === meal.id ? "Hide recipe" : "Show recipe"}
+                      </button>
+                    )}
+                    <button onClick={() => openRecipeEditor(meal)}
+                      style={{ background:"none", border:"none", cursor:"pointer", color:"var(--accent)", fontSize:12, padding:0 }}>
+                      {meal.recipeText || meal.sourceUrl ? "Edit recipe" : "+ Add recipe"}
+                    </button>
+                  </div>
+                )}
+                {recipeShownId === meal.id && meal.recipeText && recipeEditId !== meal.id && (
+                  <pre style={{ whiteSpace:"pre-wrap", wordBreak:"break-word", fontFamily:"inherit", fontSize:12, color:"var(--text-2)", background:"var(--inset)", border:"1px solid var(--border-soft)", borderRadius:8, padding:10, marginTop:8, maxHeight:260, overflowY:"auto" }}>{meal.recipeText}</pre>
+                )}
               </div>
             )}
           </Card>

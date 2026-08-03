@@ -86,6 +86,9 @@ export default function App() {
           <MealsTab
             meals={store.state.meals}
             addMeal={store.addMeal}
+            importMeal={store.importMeal}
+            setMealRecipe={store.setMealRecipe}
+            cloudReady={store.cloudReady}
             deleteMeal={store.deleteMeal}
             addIngredient={store.addIngredient}
             deleteIngredient={store.deleteIngredient}

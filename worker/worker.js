@@ -74,6 +74,117 @@ async function resolveHousehold(request, env, origin) {
   return { tenant: await tenantId(secret) };
 }
 
+// ── Recipe import ───────────────────────────────────────────────────────────
+
+const MAX_PAGE_BYTES = 3 * 1024 * 1024; // 3 MB cap on a fetched recipe page
+
+// Is a JSON-LD node a schema.org Recipe? @type may be a string or an array.
+function isRecipeNode(node) {
+  if (!node || typeof node !== "object") return false;
+  const t = node["@type"];
+  if (Array.isArray(t)) return t.some(x => String(x).toLowerCase() === "recipe");
+  return String(t || "").toLowerCase() === "recipe";
+}
+
+// Walk a parsed JSON-LD value (object, array, or { @graph: [...] }) for a Recipe.
+function findRecipe(data) {
+  if (Array.isArray(data)) {
+    for (const item of data) { const r = findRecipe(item); if (r) return r; }
+    return null;
+  }
+  if (data && typeof data === "object") {
+    if (isRecipeNode(data)) return data;
+    if (Array.isArray(data["@graph"])) return findRecipe(data["@graph"]);
+  }
+  return null;
+}
+
+// recipeInstructions is a string, an array of strings, or an array of
+// { @type: HowToStep, text } (optionally grouped under HowToSection.itemListElement).
+function instructionLines(instr) {
+  if (!instr) return [];
+  if (typeof instr === "string") return [instr.trim()];
+  if (Array.isArray(instr)) {
+    const out = [];
+    for (const step of instr) {
+      if (typeof step === "string") out.push(step.trim());
+      else if (step && typeof step === "object") {
+        if (Array.isArray(step.itemListElement)) out.push(...instructionLines(step.itemListElement));
+        else if (step.text) out.push(String(step.text).trim());
+      }
+    }
+    return out.filter(Boolean);
+  }
+  return [];
+}
+
+const NAMED_ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+
+// Decode the HTML entities recipe JSON-LD commonly carries (&amp;, &#39;, &#x2153; …).
+function decodeEntities(s) {
+  return s.replace(/&(#x?[0-9a-f]+|[a-z][a-z0-9]*);/gi, (m, code) => {
+    if (code[0] === "#") {
+      const cp = code[1].toLowerCase() === "x" ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
+      return isFinite(cp) ? String.fromCodePoint(cp) : m;
+    }
+    const named = NAMED_ENTITIES[code.toLowerCase()];
+    return named !== undefined ? named : m;
+  });
+}
+
+function stripTags(s) {
+  return decodeEntities(String(s || "").replace(/<[^>]*>/g, "")).replace(/\s+/g, " ").trim();
+}
+
+async function fetchRecipe(target, origin) {
+  if (!target) return json({ error: "missing url" }, 400, origin);
+  let parsed;
+  try { parsed = new URL(target); } catch { return json({ error: "invalid url" }, 400, origin); }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return json({ error: "unsupported url" }, 400, origin);
+  }
+
+  let html;
+  try {
+    const res = await fetch(parsed.toString(), {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; grocery-helper/1.0)" },
+      redirect: "follow",
+    });
+    if (!res.ok) return json({ error: "could not fetch" }, 502, origin);
+    const buf = await res.arrayBuffer();
+    if (buf.byteLength > MAX_PAGE_BYTES) return json({ error: "page too large" }, 502, origin);
+    html = new TextDecoder("utf-8").decode(buf);
+  } catch {
+    return json({ error: "could not fetch" }, 502, origin);
+  }
+
+  // Pull every <script type="application/ld+json"> block and search each for a Recipe.
+  const blocks = [...html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
+  let recipe = null;
+  for (const m of blocks) {
+    let data;
+    try { data = JSON.parse(m[1].trim()); } catch { continue; }
+    recipe = findRecipe(data);
+    if (recipe) break;
+  }
+  if (!recipe) return json({ error: "no recipe found" }, 404, origin);
+
+  const name = stripTags(recipe.name);
+  const rawIngredients = recipe.recipeIngredient || recipe.ingredients || [];
+  const ingredients = (Array.isArray(rawIngredients) ? rawIngredients : [rawIngredients])
+    .map(stripTags).filter(Boolean);
+  const steps = instructionLines(recipe.recipeInstructions).map(stripTags).filter(Boolean);
+
+  const recipeText = [
+    name,
+    "",
+    ...ingredients.map(i => "- " + i),
+    ...(steps.length ? ["", "Instructions:", ...steps.map((s, i) => `${i + 1}. ${s}`)] : []),
+  ].join("\n").trim();
+
+  return json({ name, ingredients, recipeText, sourceUrl: parsed.toString() }, 200, origin);
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -102,6 +213,16 @@ export default {
         .filter(e => e && (e.meal || e.name))
         .map(e => ({ date: e.date || "", weekday: e.weekday || "", meal: e.meal || e.name }));
       return json({ dinner }, 200, origin);
+    }
+
+    // Recipe import: fetch a recipe page server-side (the browser can't, due to
+    // CORS) and return its schema.org Recipe fields. Secret-gated via
+    // resolveHousehold so this is NOT an open proxy. JSON-LD only — pages
+    // without it return 404 and the client falls back to manual entry.
+    if (url.pathname === "/recipe" && request.method === "GET") {
+      const { error } = await resolveHousehold(request, env, origin);
+      if (error) return error;
+      return fetchRecipe(url.searchParams.get("url"), origin);
     }
 
     if (url.pathname === "/data") {

@@ -18,6 +18,12 @@ one of the allowed secrets in `SYNC_SECRETS`.
 | GET    | `/`     | —                   | health text |
 | GET    | `/data` | —                   | `{ version, data }` (`version` is a stringified integer, or `null` when empty) |
 | PUT    | `/data` | `{ version, data }` | `200 { ok, version }`; `409 { version, data }` if `version` is stale |
+| GET    | `/recipe?url=<page>` | —          | `{ name, ingredients:[str], recipeText, sourceUrl }` from the page's schema.org JSON-LD; `404 {error}` if none, `502 {error}` if the fetch fails |
+
+`/recipe` is the same-origin fetch proxy the browser can't do itself (CORS). It's
+secret-gated like `/data` (so it's not an open proxy), fetches only `http(s)` URLs,
+and caps the page at 3 MB. It only reads embedded schema.org `Recipe` JSON-LD —
+pages without it return `404` and the client falls back to manual meal entry.
 
 ## One-time setup
 

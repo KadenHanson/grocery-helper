@@ -148,6 +148,26 @@ export function useStore() {
     update(s => ({ ...s, meals: s.meals.filter(m => m.id !== id) }));
   }
 
+  // Add a fully-formed meal (from the recipe-import confirm screen). Ingredients
+  // arrive already shaped as {name, qty, unit, category} via parseRecipe.
+  function importMeal({ name, ingredients, recipeText, sourceUrl }) {
+    const id = "meal-" + Date.now();
+    update(s => ({
+      ...s,
+      meals: [...s.meals, { id, name, ingredients: ingredients || [], recipeText: recipeText || "", sourceUrl: sourceUrl || "" }],
+    }));
+    return id;
+  }
+
+  // Attach/edit a recipe reference on any meal (imported, manual, or default).
+  // Empty values clear the fields.
+  function setMealRecipe(mealId, { recipeText, sourceUrl }) {
+    update(s => ({
+      ...s,
+      meals: s.meals.map(m => m.id !== mealId ? m : { ...m, recipeText: recipeText || "", sourceUrl: sourceUrl || "" }),
+    }));
+  }
+
   function addIngredient(mealId, name, qty, unit) {
     update(s => ({
       ...s,
@@ -342,8 +362,9 @@ export function useStore() {
   }
 
   return {
-    state, syncStatus,
-    addMeal, deleteMeal, addIngredient, deleteIngredient, setIngCategory, setIngredientQty,
+    state, syncStatus, cloudReady: cloudConfigured(),
+    addMeal, deleteMeal, importMeal, setMealRecipe,
+    addIngredient, deleteIngredient, setIngCategory, setIngredientQty,
     importPlan, clearImport, setManualDay, clearManualDay,
     setPlanStart, swapDays, swapImported, setImportedMeal,
     addExtraItem, deleteExtra, setOverride, clearOverrides,

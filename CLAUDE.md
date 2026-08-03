@@ -42,7 +42,7 @@ All mutations funnel through `update(updater)`, which:
 ```
 { meals, importedPlan, manualPlan, extraItems, groceryOverrides, checkedItems, prices, stores, qtyTypes, planStart, _meta }
 ```
-- `meals` — the library: `[{id, name, ingredients:[{name, qty, unit, category}]}]`
+- `meals` — the library: `[{id, name, ingredients:[{name, qty, unit, category}], recipeText?, sourceUrl?}]`. `recipeText`/`sourceUrl` are optional per-meal recipe references (a plain-text snapshot + link), set on any meal via the Meals tab or filled by URL import. They ride the existing id-keyed meal merge — no new `_meta`/`KEYED` plumbing. URL import goes through the Worker's secret-gated `GET /recipe?url=` (browser can't fetch cross-origin), which extracts schema.org `Recipe` JSON-LD; `src/recipe.js` (pure) parses the free-text ingredient lines and a confirm screen lets the user fix them before saving.
 - `importedPlan` — a pasted/parsed week (bulk-replaced, no per-row identity)
 - `manualPlan` — `{dayKey: mealId}`; `mealId` may be a special sentinel `__GRILL__` or `__LEFTOVER__`
 - `extraItems` — `[{id, name}]` (ad-hoc grocery additions; **was** `string[]` before the sync work — legacy strings are migrated on load in `mergeState`)

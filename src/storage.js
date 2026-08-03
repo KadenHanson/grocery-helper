@@ -69,6 +69,23 @@ export async function saveToCloud(state, version) {
   }
 }
 
+// Fetch + extract an online recipe via the backend's secret-gated /recipe proxy
+// (the browser can't fetch arbitrary sites itself — CORS). Returns the raw
+// schema.org fields { name, ingredients:[str], recipeText, sourceUrl } on
+// success, or { error } with a message the UI can show. Needs cloud configured.
+export async function fetchRecipe(url) {
+  if (!cloudConfigured()) return { error: "Cloud sync must be set up to import recipes." };
+  try {
+    const res = await fetch(`${SYNC_URL}/recipe?url=${encodeURIComponent(url)}`, { headers: authHeaders() });
+    const body = await res.json().catch(() => null);
+    if (res.ok) return body;
+    if (res.status === 404) return { error: "Couldn't find a recipe on that page. Add it manually instead." };
+    return { error: (body && body.error) || "Couldn't read that recipe." };
+  } catch {
+    return { error: "Couldn't reach the recipe. Check the URL and your connection." };
+  }
+}
+
 // Local cache is namespaced per secret so different households (different
 // secrets) never share a local store — otherwise switching secrets would merge
 // one household's data (and its deletion tombstones) into another's.
