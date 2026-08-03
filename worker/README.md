@@ -25,6 +25,19 @@ secret-gated like `/data` (so it's not an open proxy), fetches only `http(s)` UR
 and caps the page at 3 MB. It only reads embedded schema.org `Recipe` JSON-LD —
 pages without it return `404` and the client falls back to manual meal entry.
 
+**Blocked sites (optional `SCRAPER_API_KEY`).** Big media recipe brands (AllRecipes,
+SimplyRecipes, Serious Eats — Dotdash Meredith) block the Worker's datacenter IP, so
+a direct fetch returns `502`. If `SCRAPER_API_KEY` (a [ScraperAPI](https://www.scraperapi.com/)
+key) is set, `/recipe` retries a blocked fetch through ScraperAPI's proxy pool —
+the free tier's standard (non-premium) proxies are enough; do **not** pass
+`premium`/`ultra_premium` (the free plan rejects them). Independent blogs generally
+work on the direct path and never touch ScraperAPI. Without the key the route is
+direct-only and simply returns `502` on blocked sites — nothing else breaks.
+
+```bash
+printf '%s' '<your-scraperapi-key>' | npx wrangler secret put SCRAPER_API_KEY
+```
+
 ## One-time setup
 
 Run from the `worker/` directory. `npx` pulls wrangler on demand — no global install.

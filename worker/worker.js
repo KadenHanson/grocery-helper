@@ -136,7 +136,28 @@ function stripTags(s) {
   return decodeEntities(String(s || "").replace(/<[^>]*>/g, "")).replace(/\s+/g, " ").trim();
 }
 
-async function fetchRecipe(target, origin) {
+// Browser-like headers: many recipe sites 403 a non-browser User-Agent.
+const BROWSER_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9",
+};
+
+// Fetch a URL's HTML. Returns { html } on success, or { status } on failure
+// (the upstream HTTP code, or 0 if the request threw or the body was too large).
+async function fetchHtml(target) {
+  try {
+    const res = await fetch(target, { headers: BROWSER_HEADERS, redirect: "follow" });
+    if (!res.ok) return { status: res.status };
+    const buf = await res.arrayBuffer();
+    if (buf.byteLength > MAX_PAGE_BYTES) return { status: 0 };
+    return { html: new TextDecoder("utf-8").decode(buf) };
+  } catch {
+    return { status: 0 };
+  }
+}
+
+async function fetchRecipe(target, origin, env) {
   if (!target) return json({ error: "missing url" }, 400, origin);
   let parsed;
   try { parsed = new URL(target); } catch { return json({ error: "invalid url" }, 400, origin); }
@@ -144,25 +165,17 @@ async function fetchRecipe(target, origin) {
     return json({ error: "unsupported url" }, 400, origin);
   }
 
-  let html;
-  try {
-    // Browser-like headers: many recipe sites 403 non-browser User-Agents.
-    // (Datacenter-IP blocking can still defeat this — see the status we surface.)
-    const res = await fetch(parsed.toString(), {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-      redirect: "follow",
-    });
-    if (!res.ok) return json({ error: "could not fetch", status: res.status }, 502, origin);
-    const buf = await res.arrayBuffer();
-    if (buf.byteLength > MAX_PAGE_BYTES) return json({ error: "page too large" }, 502, origin);
-    html = new TextDecoder("utf-8").decode(buf);
-  } catch {
-    return json({ error: "could not fetch", status: 0 }, 502, origin);
+  // Direct fetch first — free, and works for most independent recipe blogs. If
+  // the site blocks our datacenter IP (big media brands do), retry through
+  // ScraperAPI's proxy pool when SCRAPER_API_KEY is set. With no key we simply
+  // stay direct-only, so nothing breaks for a deployment without one.
+  let page = await fetchHtml(parsed.toString());
+  if (!page.html && env && env.SCRAPER_API_KEY) {
+    const api = `https://api.scraperapi.com/?api_key=${env.SCRAPER_API_KEY}&url=${encodeURIComponent(parsed.toString())}`;
+    page = await fetchHtml(api);
   }
+  if (!page.html) return json({ error: "could not fetch", status: page.status }, 502, origin);
+  const html = page.html;
 
   // Pull every <script type="application/ld+json"> block and search each for a Recipe.
   const blocks = [...html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
@@ -228,7 +241,7 @@ export default {
     if (url.pathname === "/recipe" && request.method === "GET") {
       const { error } = await resolveHousehold(request, env, origin);
       if (error) return error;
-      return fetchRecipe(url.searchParams.get("url"), origin);
+      return fetchRecipe(url.searchParams.get("url"), origin, env);
     }
 
     if (url.pathname === "/data") {
