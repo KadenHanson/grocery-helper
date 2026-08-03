@@ -146,16 +146,22 @@ async function fetchRecipe(target, origin) {
 
   let html;
   try {
+    // Browser-like headers: many recipe sites 403 non-browser User-Agents.
+    // (Datacenter-IP blocking can still defeat this — see the status we surface.)
     const res = await fetch(parsed.toString(), {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; grocery-helper/1.0)" },
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
       redirect: "follow",
     });
-    if (!res.ok) return json({ error: "could not fetch" }, 502, origin);
+    if (!res.ok) return json({ error: "could not fetch", status: res.status }, 502, origin);
     const buf = await res.arrayBuffer();
     if (buf.byteLength > MAX_PAGE_BYTES) return json({ error: "page too large" }, 502, origin);
     html = new TextDecoder("utf-8").decode(buf);
   } catch {
-    return json({ error: "could not fetch" }, 502, origin);
+    return json({ error: "could not fetch", status: 0 }, 502, origin);
   }
 
   // Pull every <script type="application/ld+json"> block and search each for a Recipe.

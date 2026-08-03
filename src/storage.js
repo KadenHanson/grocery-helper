@@ -80,6 +80,15 @@ export async function fetchRecipe(url) {
     const body = await res.json().catch(() => null);
     if (res.ok) return body;
     if (res.status === 404) return { error: "Couldn't find a recipe on that page. Add it manually instead." };
+    // 502 = the backend reached out but the site refused. `status` is the site's
+    // HTTP code (0 = the request never completed). Many big recipe sites block
+    // automated access regardless of headers, so name the code and suggest another.
+    if (res.status === 502) {
+      const upstream = body && typeof body.status === "number" ? body.status : null;
+      return { error: upstream
+        ? `That site blocked the request (HTTP ${upstream}). Some sites block automated access — try another recipe site.`
+        : "Couldn't reach that page. Some sites block automated access — try another recipe site." };
+    }
     return { error: (body && body.error) || "Couldn't read that recipe." };
   } catch {
     return { error: "Couldn't reach the recipe. Check the URL and your connection." };
