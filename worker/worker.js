@@ -133,7 +133,45 @@ function decodeEntities(s) {
 }
 
 function stripTags(s) {
-  return decodeEntities(String(s || "").replace(/<[^>]*>/g, "")).replace(/\s+/g, " ").trim();
+  // Replace tags with a space (not "") so nested inline elements in microdata
+  // don't glue adjacent words together ("2 cups<span>flour" → "2 cups flour").
+  return decodeEntities(String(s || "").replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
+}
+
+// Fallback when a page has no JSON-LD Recipe: scrape schema.org microdata and
+// WordPress Recipe Maker markup. Best-effort; returns { name, ingredients, steps,
+// recipeYield } or null. The tag-name backreference (\1) captures an element's
+// full inner HTML so nested amount/unit/name spans survive stripTags.
+function extractMicrodata(html) {
+  const ing = [];
+  const patterns = [
+    /<(\w+)[^>]*itemprop=["']recipeIngredient["'][^>]*>([\s\S]*?)<\/\1>/gi,
+    /<(\w+)[^>]*itemprop=["']ingredients["'][^>]*>([\s\S]*?)<\/\1>/gi,
+    /<(\w+)[^>]*class=["'][^"']*wprm-recipe-ingredient\b[^"']*["'][^>]*>([\s\S]*?)<\/\1>/gi,
+  ];
+  for (const re of patterns) {
+    for (const m of html.matchAll(re)) { const line = stripTags(m[2]); if (line) ing.push(line); }
+    if (ing.length) break;
+  }
+  if (!ing.length) return null;
+  // Quality guard: some plugins put itemprop on inner annotation spans ("Ripe",
+  // "Optional") rather than the whole ingredient. Real lines mostly carry a digit
+  // or several words — if most don't, bail (→ 404) so the user pastes instead of
+  // seeing garbage.
+  const good = ing.filter(l => /\d/.test(l) || l.split(/\s+/).length >= 3).length;
+  if (good < Math.ceil(ing.length / 2)) return null;
+
+  const nameOf = (re) => { const m = html.match(re); return m ? stripTags(m[2] ?? m[1]) : ""; };
+  const name =
+    nameOf(/<(\w+)[^>]*itemprop=["']name["'][^>]*>([\s\S]*?)<\/\1>/i) ||
+    nameOf(/<(\w+)[^>]*class=["'][^"']*wprm-recipe-name\b[^"']*["'][^>]*>([\s\S]*?)<\/\1>/i) ||
+    nameOf(/<title[^>]*>([\s\S]*?)<\/title>/i);
+
+  const steps = [];
+  for (const m of html.matchAll(/<(\w+)[^>]*class=["'][^"']*wprm-recipe-instruction-text\b[^"']*["'][^>]*>([\s\S]*?)<\/\1>/gi)) {
+    const t = stripTags(m[2]); if (t) steps.push(t);
+  }
+  return { name, ingredients: ing, steps, recipeYield: null };
 }
 
 // Browser-like headers: many recipe sites 403 a non-browser User-Agent.
@@ -186,22 +224,34 @@ async function fetchRecipe(target, origin, env) {
     recipe = findRecipe(data);
     if (recipe) break;
   }
-  if (!recipe) return json({ error: "no recipe found" }, 404, origin);
 
-  const name = stripTags(recipe.name);
-  const rawIngredients = recipe.recipeIngredient || recipe.ingredients || [];
-  const ingredients = (Array.isArray(rawIngredients) ? rawIngredients : [rawIngredients])
-    .map(stripTags).filter(Boolean);
-  const steps = instructionLines(recipe.recipeInstructions).map(stripTags).filter(Boolean);
+  let name, ingredients, steps, recipeYield;
+  if (recipe) {
+    name = stripTags(recipe.name);
+    const rawIngredients = recipe.recipeIngredient || recipe.ingredients || [];
+    ingredients = (Array.isArray(rawIngredients) ? rawIngredients : [rawIngredients]).map(stripTags).filter(Boolean);
+    steps = instructionLines(recipe.recipeInstructions).map(stripTags).filter(Boolean);
+    recipeYield = recipe.recipeYield ?? null;
+  } else {
+    // No JSON-LD Recipe — try microdata / WPRM markup before giving up.
+    const md = extractMicrodata(html);
+    if (!md) return json({ error: "no recipe found" }, 404, origin);
+    ({ name, ingredients, steps, recipeYield } = md);
+  }
+  if (!ingredients.length) return json({ error: "no recipe found" }, 404, origin);
 
+  const yieldStr = recipeYield != null
+    ? stripTags(String(Array.isArray(recipeYield) ? recipeYield.find(v => v != null) : recipeYield))
+    : "";
   const recipeText = [
     name,
+    ...(yieldStr ? [`Servings: ${yieldStr}`] : []),
     "",
     ...ingredients.map(i => "- " + i),
     ...(steps.length ? ["", "Instructions:", ...steps.map((s, i) => `${i + 1}. ${s}`)] : []),
   ].join("\n").trim();
 
-  return json({ name, ingredients, recipeText, sourceUrl: parsed.toString() }, 200, origin);
+  return json({ name, ingredients, recipeText, sourceUrl: parsed.toString(), recipeYield: recipeYield ?? null }, 200, origin);
 }
 
 export default {

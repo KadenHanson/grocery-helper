@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { guessCategory, normalize, isSpecial, CATEGORIES, priceKey } from "./constants";
+import { guessCategory, normalize, isSpecial, CATEGORIES, priceKey, titleCaseName } from "./constants";
 import { loadFromCloud, saveToCloud, loadFromLocal, saveToLocal, cloudConfigured } from "./storage";
 import { normalizeMeta, stampMeta, mergeStates, genId } from "./merge";
 
@@ -14,10 +14,52 @@ const DEFAULT_STATE = {
   stores: {},
   qtyTypes: {},
   planStart: "",
+  weekCount: 1,
 };
 
+// Title-Case every ingredient + extra-item name. Idempotent, so applying it on
+// every hydrate (local load AND the remote doc pre-merge) makes all devices
+// converge on consistent casing with no migration flag. Casing is display-only
+// for behavior — all keys are lowercased downstream.
+function normalizeNames(state) {
+  return {
+    ...state,
+    meals: (state.meals || []).map(m => ({
+      ...m,
+      ingredients: (m.ingredients || []).map(i => ({ ...i, name: titleCaseName(i.name) })),
+    })),
+    extraItems: (state.extraItems || []).map(e => ({ ...e, name: titleCaseName(e.name) })),
+  };
+}
+
+// Migrate a single-week manualPlan (keys "S"/"M"/…) to week-scoped composite
+// keys ("0:S"). Remaps the matching _meta stamps + tombstones too, so per-day
+// last-writer-wins survives. Then derives weekCount from the keys + any saved value.
+function migrateManualWeeks(s, savedWeekCount) {
+  const mp = s.manualPlan || {};
+  if (Object.keys(mp).some(k => !k.includes(":"))) {
+    const bump = (obj) => {
+      if (!obj) return obj;
+      const out = {};
+      for (const k of Object.keys(obj)) out[k.includes(":") ? k : `0:${k}`] = obj[k];
+      return out;
+    };
+    s.manualPlan = bump(mp);
+    if (s._meta) {
+      s._meta.manualPlan = bump(s._meta.manualPlan);
+      if (s._meta.del) s._meta.del.manualPlan = bump(s._meta.del.manualPlan);
+    }
+  }
+  const maxWeek = Object.keys(s.manualPlan).reduce((mx, k) => {
+    const w = parseInt(String(k).split(":")[0], 10);
+    return isNaN(w) ? mx : Math.max(mx, w);
+  }, 0);
+  s.weekCount = Math.max(1, maxWeek + 1, savedWeekCount || 1);
+}
+
 // Normalize a saved doc into current shape: fill defaults, migrate legacy
-// extraItems (string[] -> {id,name}[]), drop backup wrapper keys, ensure _meta.
+// extraItems (string[] -> {id,name}[]) and single-week manualPlan, normalize
+// names, drop backup wrapper keys, ensure _meta.
 function mergeState(saved) {
   const { _backup, _date, ...rest } = saved || {};
   const s = {
@@ -29,11 +71,13 @@ function mergeState(saved) {
     stores: rest.stores || {},
     qtyTypes: rest.qtyTypes || {},
     planStart: rest.planStart || "",
+    manualPlan: rest.manualPlan || {},
   };
   s.extraItems = (s.extraItems || []).map(e =>
     typeof e === "string" ? { id: genId("x"), name: e } : e
   );
-  return normalizeMeta(s);
+  migrateManualWeeks(s, rest.weekCount);
+  return normalizeNames(normalizeMeta(s));
 }
 
 export function useStore() {
@@ -63,7 +107,7 @@ export function useStore() {
       const remote = await loadFromCloud();
       if (!remote) return false; // backend unreachable
       const local = stateRef.current;
-      const remoteState = remote.state ? normalizeMeta(remote.state) : null;
+      const remoteState = remote.state ? normalizeNames(normalizeMeta(remote.state)) : null;
       const merged = remoteState ? mergeStates(local, remoteState) : local;
       stateRef.current = merged;
       setState(merged);
@@ -150,11 +194,11 @@ export function useStore() {
 
   // Add a fully-formed meal (from the recipe-import confirm screen). Ingredients
   // arrive already shaped as {name, qty, unit, category} via parseRecipe.
-  function importMeal({ name, ingredients, recipeText, sourceUrl }) {
+  function importMeal({ name, ingredients, recipeText, sourceUrl, servings }) {
     const id = "meal-" + Date.now();
     update(s => ({
       ...s,
-      meals: [...s.meals, { id, name, ingredients: ingredients || [], recipeText: recipeText || "", sourceUrl: sourceUrl || "" }],
+      meals: [...s.meals, { id, name, ingredients: ingredients || [], recipeText: recipeText || "", sourceUrl: sourceUrl || "", servings: servings || null }],
     }));
     return id;
   }
@@ -169,11 +213,12 @@ export function useStore() {
   }
 
   function addIngredient(mealId, name, qty, unit) {
+    const nm = titleCaseName(name);
     update(s => ({
       ...s,
       meals: s.meals.map(m => m.id !== mealId ? m : {
         ...m,
-        ingredients: [...m.ingredients, { name, qty, unit, category: guessCategory(name) }]
+        ingredients: [...m.ingredients, { name: nm, qty, unit, category: guessCategory(nm) }]
       })
     }));
   }
@@ -224,6 +269,21 @@ export function useStore() {
   function clearImport() { update(s => ({ ...s, importedPlan: [] })); }
 
   function setPlanStart(date) { update(s => ({ ...s, planStart: date })); }
+
+  // Multi-week manual planning. Weeks are 0-based; manualPlan keys are "week:day"
+  // (e.g. "0:S"). addWeek appends; removeLastWeek drops the last week and its
+  // assignments (only the last is removable — avoids reindexing).
+  function addWeek() { update(s => ({ ...s, weekCount: (s.weekCount || 1) + 1 })); }
+  function removeLastWeek() {
+    update(s => {
+      const wc = s.weekCount || 1;
+      if (wc <= 1) return s;
+      const last = wc - 1;
+      const mp = { ...s.manualPlan };
+      for (const k of Object.keys(mp)) if (k.startsWith(`${last}:`)) delete mp[k];
+      return { ...s, manualPlan: mp, weekCount: wc - 1 };
+    });
+  }
 
   // Swap which meal sits on two manual days.
   function swapDays(a, b) {
@@ -276,7 +336,7 @@ export function useStore() {
   }
 
   // ── Grocery ───────────────────────────────────────────────────────────────
-  function addExtraItem(val) { update(s => ({ ...s, extraItems: [...s.extraItems, { id: genId("x"), name: val }] })); }
+  function addExtraItem(val) { update(s => ({ ...s, extraItems: [...s.extraItems, { id: genId("x"), name: titleCaseName(val) }] })); }
   function deleteExtra(id) { update(s => ({ ...s, extraItems: s.extraItems.filter(e => e.id !== id) })); }
 
   function setOverride(key, data) {
@@ -366,7 +426,7 @@ export function useStore() {
     addMeal, deleteMeal, importMeal, setMealRecipe,
     addIngredient, deleteIngredient, setIngCategory, setIngredientQty,
     importPlan, clearImport, setManualDay, clearManualDay,
-    setPlanStart, swapDays, swapImported, setImportedMeal,
+    setPlanStart, swapDays, swapImported, setImportedMeal, addWeek, removeLastWeek,
     addExtraItem, deleteExtra, setOverride, clearOverrides,
     toggleChecked, clearChecked, setPrice, setStore, setQtyType,
     restoreBackup, syncNow, pullNow,
@@ -391,27 +451,28 @@ function findMatch(mealName, meals) {
   return best ? best.id : null;
 }
 
-export function aggregateIngredients(state) {
+// weekFilter: null/"all" aggregates every manual week (default); a week index
+// (number or numeric string) restricts manual meals to that week. The imported
+// plan is always included.
+export function aggregateIngredients(state, weekFilter = null) {
   const map = {};
+  const addMeal = (meal) => {
+    if (!meal) return;
+    meal.ingredients.forEach(ing => {
+      const key = ing.name.toLowerCase();
+      if (!map[key]) map[key] = { name: ing.name, qty: 0, unit: ing.unit, category: ing.category || null };
+      map[key].qty += ing.qty;
+    });
+  };
   state.importedPlan.forEach(entry => {
     if (entry.special || !entry.matchedId) return;
-    const meal = state.meals.find(m => m.id === entry.matchedId);
-    if (!meal) return;
-    meal.ingredients.forEach(ing => {
-      const key = ing.name.toLowerCase();
-      if (!map[key]) map[key] = { name: ing.name, qty: 0, unit: ing.unit, category: ing.category || null };
-      map[key].qty += ing.qty;
-    });
+    addMeal(state.meals.find(m => m.id === entry.matchedId));
   });
-  Object.values(state.manualPlan).forEach(id => {
+  const onlyWeek = weekFilter != null && weekFilter !== "all" ? Number(weekFilter) : null;
+  Object.entries(state.manualPlan).forEach(([key, id]) => {
+    if (onlyWeek != null && parseInt(String(key).split(":")[0], 10) !== onlyWeek) return;
     if (id === "__GRILL__" || id === "__LEFTOVER__") return;
-    const meal = state.meals.find(m => m.id === id);
-    if (!meal) return;
-    meal.ingredients.forEach(ing => {
-      const key = ing.name.toLowerCase();
-      if (!map[key]) map[key] = { name: ing.name, qty: 0, unit: ing.unit, category: ing.category || null };
-      map[key].qty += ing.qty;
-    });
+    addMeal(state.meals.find(m => m.id === id));
   });
   return Object.values(map)
     .map(i => ({ ...i, category: i.category || guessCategory(i.name) }))

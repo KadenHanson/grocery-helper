@@ -40,18 +40,19 @@ All mutations funnel through `update(updater)`, which:
 ### The state shape
 
 ```
-{ meals, importedPlan, manualPlan, extraItems, groceryOverrides, checkedItems, prices, stores, qtyTypes, planStart, _meta }
+{ meals, importedPlan, manualPlan, extraItems, groceryOverrides, checkedItems, prices, stores, qtyTypes, planStart, weekCount, _meta }
 ```
-- `meals` — the library: `[{id, name, ingredients:[{name, qty, unit, category}], recipeText?, sourceUrl?}]`. `recipeText`/`sourceUrl` are optional per-meal recipe references (a plain-text snapshot + link), set on any meal via the Meals tab or filled by URL import. They ride the existing id-keyed meal merge — no new `_meta`/`KEYED` plumbing. URL import goes through the Worker's secret-gated `GET /recipe?url=` (browser can't fetch cross-origin), which extracts schema.org `Recipe` JSON-LD; `src/recipe.js` (pure) parses the free-text ingredient lines and a confirm screen lets the user fix them before saving.
+- `meals` — the library: `[{id, name, ingredients:[{name, qty, unit, category}], recipeText?, sourceUrl?, servings?}]`. `recipeText`/`sourceUrl` are optional per-meal recipe references (a plain-text snapshot + link), set on any meal via the Meals tab or filled by import; `servings` records the recipe's yield. They ride the existing id-keyed meal merge — no new `_meta`/`KEYED` plumbing. Import is a Meals-tab flow with two modes: **URL** (Worker's secret-gated `GET /recipe?url=`, browser can't fetch cross-origin) and **paste text** (offline, no backend). Both run through `src/recipe.js` (pure) — `parseRecipe` parses free-text ingredient lines, cleans + Title-Cases names (`cleanIngredientName`), and reads `recipeYield` into `servings`; a confirm screen (with servings-based scaling) lets the user fix everything before saving. Ingredient/extra names are Title-Cased everywhere via `titleCaseName` (idempotent, applied on every hydrate — casing is display-only since all keys lowercase).
 - `importedPlan` — a pasted/parsed week (bulk-replaced, no per-row identity)
-- `manualPlan` — `{dayKey: mealId}`; `mealId` may be a special sentinel `__GRILL__` or `__LEFTOVER__`
+- `manualPlan` — `{"week:day": mealId}` (0-based week, e.g. `"0:S"`, `"1:M"`), supporting multi-week planning; `mealId` may be a special sentinel `__GRILL__` or `__LEFTOVER__`. Legacy single-week docs (bare-day keys) migrate to week 0 in `mergeState` (values **and** `_meta` stamps remapped).
 - `extraItems` — `[{id, name}]` (ad-hoc grocery additions; **was** `string[]` before the sync work — legacy strings are migrated on load in `mergeState`)
 - `groceryOverrides` — `{ingredientKey: patch | null}`; `null` means "remove this line from the list"
 - `checkedItems` — `{key: true}` shopping-checklist state; keys prefixed `i:`<lowercased ingredient name> or `x:`<extra id>. Unchecking deletes the key (tombstone).
 - `prices` — `{lowercased item name: number}` remembered unit prices (keyed by name so they carry across weeks); drives the estimated-total readout.
 - `stores` — `{lowercased item name: storeName}` remembered store assignment (from `STORES` in constants.js); groups the Shop view. Unset = "Unassigned".
 - `qtyTypes` — `{priceKey(name): "meal"}` quantity qualifier; absent = individual ("ind"). **Display-only** (cost stays price × qty) — shown as a small label (`meal` / `ind`) via `<QtyTag>`/`<TypeLabel>`, toggled in the Meals library and grocery Manage rows.
-- `planStart` — ISO `YYYY-MM-DD` start date for the plan week (defaults to the current week's Sunday); drives the per-day dates on the Plan tab. A versioned scalar in `_meta` (merged like `importedPlan`).
+- `planStart` — ISO `YYYY-MM-DD` start date for week 0 (defaults to the current week's Sunday); week N's dates are `planStart + 7N` days. A versioned scalar in `_meta` (merged like `importedPlan`).
+- `weekCount` — number of manual-plan weeks (default 1). A versioned scalar in `_meta` (mirrors `planStart`). Plan tab has a week navigator (+ add / remove-last week); Grocery tab has a per-week selector (default "All") via `aggregateIngredients(state, weekFilter)`.
 - `_meta` — sync bookkeeping (see below); strip `_backup`/`_date` wrapper keys when importing a backup
 
 All of `meals`/`extraItems`/`manualPlan`/`groceryOverrides`/`checkedItems`/`prices`/`stores`/`qtyTypes` are the merge-tracked collections (the `KEYED` list in `merge.js`) — adding a new synced map means registering it there too.

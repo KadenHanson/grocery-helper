@@ -10,18 +10,36 @@ export default function MealsTab({ meals, addMeal, importMeal, setMealRecipe, cl
   const [newName, setNewName] = useState("");
   const [ingDraft, setIngDraft] = useState({});
 
-  // Recipe import flow
+  // Recipe import flow. Two modes: fetch a URL (needs cloud) or paste text (works
+  // offline). Both feed the same confirm screen via parseRecipe.
   const [importOpen, setImportOpen] = useState(false);
+  const [importMode, setImportMode] = useState(cloudReady ? "url" : "paste");
   const [importUrl, setImportUrl] = useState("");
+  const [pasteText, setPasteText] = useState("");
+  const [pasteName, setPasteName] = useState("");
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState("");
-  const [confirm, setConfirm] = useState(null); // { name, sourceUrl, recipeText, rows:[{name,qty,unit,category,include}] }
+  // confirm: { name, sourceUrl, recipeText, servings, target, rows:[{name,origQty,qty,unit,category,include}] }
+  const [confirm, setConfirm] = useState(null);
   const [snapOpen, setSnapOpen] = useState(false); // confirm-screen snapshot toggle
 
   // Per-meal recipe reference (attach/edit on any meal)
   const [recipeEditId, setRecipeEditId] = useState(null);
   const [recipeDraft, setRecipeDraft] = useState({ text: "", url: "" });
   const [recipeShownId, setRecipeShownId] = useState(null); // read-only snapshot toggle
+
+  function openConfirm(parsed) {
+    setConfirm({
+      name: parsed.name,
+      sourceUrl: parsed.sourceUrl,
+      recipeText: parsed.recipeText,
+      servings: parsed.servings || null,
+      target: parsed.servings || "",
+      rows: parsed.ingredients.map(i => ({ ...i, origQty: i.qty, include: true })),
+    });
+    setSnapOpen(false);
+    setImportOpen(false); setImportUrl(""); setPasteText(""); setPasteName("");
+  }
 
   async function runImport() {
     const url = importUrl.trim();
@@ -30,23 +48,35 @@ export default function MealsTab({ meals, addMeal, importMeal, setMealRecipe, cl
     const res = await fetchRecipe(url);
     setImporting(false);
     if (!res || res.error) { setImportError((res && res.error) || "Couldn't read that recipe."); return; }
-    const parsed = parseRecipe(res);
-    setConfirm({
-      name: parsed.name,
-      sourceUrl: parsed.sourceUrl,
-      recipeText: parsed.recipeText,
-      rows: parsed.ingredients.map(i => ({ ...i, include: true })),
-    });
-    setSnapOpen(false);
-    setImportOpen(false); setImportUrl("");
+    openConfirm(parseRecipe(res));
+  }
+
+  function runPaste() {
+    const text = pasteText.trim();
+    if (!text) return;
+    openConfirm(parseRecipe({
+      name: pasteName.trim(),
+      ingredients: text.split("\n").map(l => l.trim()).filter(Boolean),
+      recipeText: text,
+      sourceUrl: "",
+    }));
   }
 
   function setRow(idx, patch) {
     setConfirm(c => ({ ...c, rows: c.rows.map((r, i) => i === idx ? { ...r, ...patch } : r) }));
   }
 
+  // Rescale all rows from their original parsed qty by target/servings. Bulk
+  // action — it overrides manual per-row qty edits (origQty is the stable base).
+  function setScale(target) {
+    setConfirm(c => {
+      const factor = c.servings && Number(target) > 0 ? Number(target) / c.servings : 1;
+      return { ...c, target, rows: c.rows.map(r => ({ ...r, qty: Math.round(r.origQty * factor * 100) / 100 })) };
+    });
+  }
+
   function saveImport() {
-    const rows = confirm.rows.filter(r => r.include && r.name.trim());
+    const rows = confirm.rows.filter(r => r.include && String(r.name).trim());
     const id = importMeal({
       name: confirm.name.trim() || "Untitled meal",
       ingredients: rows.map(r => ({
@@ -57,6 +87,7 @@ export default function MealsTab({ meals, addMeal, importMeal, setMealRecipe, cl
       })),
       recipeText: confirm.recipeText,
       sourceUrl: confirm.sourceUrl,
+      servings: Number(confirm.target) || confirm.servings || null,
     });
     setConfirm(null);
     setExpanded(id);
@@ -131,26 +162,51 @@ export default function MealsTab({ meals, addMeal, importMeal, setMealRecipe, cl
           <p style={{ fontSize:13, color:"var(--faint)", marginBottom:0 }}>{meals.length} meals{avgCost ? ` · avg $${avgCost.toFixed(2)}/meal` : ""} · tap to manage</p>
         </div>
         <div style={{ display:"flex", gap:8 }}>
-          {cloudReady && (
-            <Btn onClick={() => { setImportOpen(o => !o); setImportError(""); }}>Import URL</Btn>
-          )}
+          <Btn onClick={() => { setImportOpen(o => !o); setImportError(""); }}>Import</Btn>
           <Btn variant="primary" onClick={() => setAdding(true)}>+ Add</Btn>
         </div>
       </div>
 
       {importOpen && !confirm && (
         <Card style={{ padding:14, marginBottom:12 }}>
-          <Label>Import from a recipe URL</Label>
-          <div style={{ display:"flex", gap:8, marginBottom:8 }}>
-            <Input value={importUrl} onChange={e => setImportUrl(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && !importing && runImport()}
-              placeholder="https://…" autoFocus />
+          {/* URL | Paste mode toggle */}
+          <div style={{ display:"flex", gap:6, marginBottom:10 }}>
+            {["url","paste"].map(mode => (
+              <button key={mode} onClick={() => { setImportMode(mode); setImportError(""); }}
+                style={{ padding:"5px 12px", borderRadius:20, border:`1px solid ${importMode===mode ? "var(--text)" : "var(--border)"}`, background:"none", color: importMode===mode ? "var(--text)" : "var(--faint)", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                {mode === "url" ? "From URL" : "Paste text"}
+              </button>
+            ))}
           </div>
-          {importError && <p style={{ fontSize:12, color:"var(--danger)", margin:"0 0 8px" }}>{importError}</p>}
-          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-            <Btn variant="primary" onClick={runImport}>{importing ? "Reading…" : "Import"}</Btn>
-            <Btn onClick={() => { setImportOpen(false); setImportUrl(""); setImportError(""); }}>Cancel</Btn>
-          </div>
+
+          {importMode === "url" ? (
+            <>
+              <Label>Import from a recipe URL</Label>
+              <div style={{ display:"flex", gap:8, marginBottom:8 }}>
+                <Input value={importUrl} onChange={e => setImportUrl(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && !importing && runImport()}
+                  placeholder="https://…" autoFocus />
+              </div>
+              {!cloudReady && <p style={{ fontSize:11, color:"var(--faint)", margin:"0 0 8px", lineHeight:1.5 }}>URL import needs cloud sync set up. Use “Paste text” to import without it.</p>}
+              {importError && <p style={{ fontSize:12, color:"var(--danger)", margin:"0 0 8px" }}>{importError}</p>}
+              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                <Btn variant="primary" onClick={runImport}>{importing ? "Reading…" : "Import"}</Btn>
+                <Btn onClick={() => { setImportOpen(false); setImportUrl(""); setImportError(""); }}>Cancel</Btn>
+              </div>
+            </>
+          ) : (
+            <>
+              <Label>Paste a recipe</Label>
+              <Input value={pasteName} onChange={e => setPasteName(e.target.value)} placeholder="Meal name (optional)" style={{ marginBottom:8 }} />
+              <textarea value={pasteText} onChange={e => setPasteText(e.target.value)} rows={7}
+                placeholder={"Paste the ingredient list, one per line…\n2 cups flour\n1 lb chicken breast"}
+                style={{ width:"100%", boxSizing:"border-box", background:"var(--input-bg)", border:"1px solid var(--border)", borderRadius:8, color:"var(--text)", fontSize:13, padding:"9px 12px", outline:"none", fontFamily:"inherit", resize:"vertical", marginBottom:8 }} />
+              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                <Btn variant="primary" onClick={runPaste}>Parse</Btn>
+                <Btn onClick={() => { setImportOpen(false); setPasteText(""); setPasteName(""); }}>Cancel</Btn>
+              </div>
+            </>
+          )}
         </Card>
       )}
 
@@ -159,6 +215,18 @@ export default function MealsTab({ meals, addMeal, importMeal, setMealRecipe, cl
           <Label>Review imported meal</Label>
           <Input value={confirm.name} onChange={e => setConfirm(c => ({ ...c, name: e.target.value }))}
             placeholder="Meal name" style={{ marginBottom:10 }} />
+
+          {confirm.servings && (
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10, fontSize:12, color:"var(--muted)", flexWrap:"wrap" }}>
+              <span>Serves {confirm.servings} · cooking for</span>
+              <input type="number" min="1" step="1" value={confirm.target}
+                onChange={e => setScale(e.target.value)}
+                style={{ width:52, background:"var(--input-bg)", border:"1px solid var(--border)", borderRadius:6, color:"var(--text)", fontSize:13, padding:"4px 6px", outline:"none", textAlign:"center" }} />
+              {Number(confirm.target) > 0 && Number(confirm.target) !== confirm.servings && (
+                <span style={{ color:"var(--faint)" }}>quantities ×{(Number(confirm.target) / confirm.servings).toFixed(2)}</span>
+              )}
+            </div>
+          )}
 
           {confirm.rows.length === 0 && <EmptyState style={{ padding:"12px 0" }}>No ingredients found — you can still save and add them manually.</EmptyState>}
 

@@ -111,6 +111,8 @@ export default function App() {
             swapDays={store.swapDays}
             swapImported={store.swapImported}
             setImportedMeal={store.setImportedMeal}
+            addWeek={store.addWeek}
+            removeLastWeek={store.removeLastWeek}
           />
         )}
         {tab === "grocery" && (

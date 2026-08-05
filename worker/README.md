@@ -18,12 +18,14 @@ one of the allowed secrets in `SYNC_SECRETS`.
 | GET    | `/`     | —                   | health text |
 | GET    | `/data` | —                   | `{ version, data }` (`version` is a stringified integer, or `null` when empty) |
 | PUT    | `/data` | `{ version, data }` | `200 { ok, version }`; `409 { version, data }` if `version` is stale |
-| GET    | `/recipe?url=<page>` | —          | `{ name, ingredients:[str], recipeText, sourceUrl }` from the page's schema.org JSON-LD; `404 {error}` if none, `502 {error}` if the fetch fails |
+| GET    | `/recipe?url=<page>` | —          | `{ name, ingredients:[str], recipeText, sourceUrl, recipeYield }` from the page's schema.org JSON-LD (falls back to microdata/WPRM markup); `404 {error}` if none, `502 {error}` if the fetch fails |
 
 `/recipe` is the same-origin fetch proxy the browser can't do itself (CORS). It's
 secret-gated like `/data` (so it's not an open proxy), fetches only `http(s)` URLs,
-and caps the page at 3 MB. It only reads embedded schema.org `Recipe` JSON-LD —
-pages without it return `404` and the client falls back to manual meal entry.
+and caps the page at 3 MB. It reads embedded schema.org `Recipe` JSON-LD, and if
+that's absent falls back to scraping schema.org microdata / WordPress Recipe Maker
+markup (with a quality guard that rejects degenerate extractions). Pages with
+neither return `404`; the client then offers paste-text or manual entry.
 
 **Blocked sites (optional `SCRAPER_API_KEY`).** Big media recipe brands (AllRecipes,
 SimplyRecipes, Serious Eats — Dotdash Meredith) block the Worker's datacenter IP, so

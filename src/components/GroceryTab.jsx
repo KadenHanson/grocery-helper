@@ -13,7 +13,14 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
   const [editQty, setEditQty] = useState("");
   const [toast, setToast] = useState(null);
 
-  const rawAgg = aggregateIngredients(state);
+  // Which manual week(s) feed the list: "all" (default) or a week index. Clamp a
+  // stale selection (e.g. after a week was removed) back to "all".
+  const weekCount = state.weekCount || 1;
+  const [weekSel, setWeekSel] = useState(() => { try { return localStorage.getItem("gh_grocery_week") || "all"; } catch { return "all"; } });
+  function pickWeek(v) { setWeekSel(v); try { localStorage.setItem("gh_grocery_week", v); } catch {} }
+  const effWeek = weekSel !== "all" && Number(weekSel) < weekCount ? Number(weekSel) : "all";
+
+  const rawAgg = aggregateIngredients(state, effWeek === "all" ? null : effWeek);
   const agg = applyOverrides(rawAgg, groceryOverrides);
   const hasOverrides = Object.keys(groceryOverrides || {}).length > 0;
 
@@ -210,6 +217,15 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
         {pill(view === "manage", () => setView("manage"), "Manage")}
         {pill(view === "shop", () => setView("shop"), `Shop${checkedCount ? ` · ${checkedCount}/${totalItems}` : ""}`)}
       </div>
+
+      {/* Week selector (only when the manual plan spans multiple weeks) */}
+      {weekCount > 1 && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: 11, color: "var(--faint)", marginRight: 2 }}>Shop for:</span>
+          {pill(effWeek === "all", () => pickWeek("all"), "All weeks")}
+          {Array.from({ length: weekCount }, (_, w) => pill(effWeek === w, () => pickWeek(String(w)), `Week ${w + 1}`))}
+        </div>
+      )}
 
       {view === "manage" ? (
         <>

@@ -8,7 +8,7 @@
 // this stay deliberately simple. We only need the name roughly right; the
 // exact measurements live in the recipeText snapshot.
 
-import { guessCategory } from "./constants";
+import { guessCategory, cleanIngredientName } from "./constants";
 
 // Unicode vulgar fractions → ascii "n/d". Covers the ones real recipe sites use.
 const VULGAR = {
@@ -95,14 +95,25 @@ export function parseIngredientLine(raw) {
   return { name, qty: qty == null ? 1 : qty, unit };
 }
 
+// schema.org recipeYield → a serving count. Handles "4", "4 servings", ["6"],
+// "6 to 8 servings" (first integer). Returns null when there's no number.
+export function parseServings(recipeYield) {
+  if (recipeYield == null) return null;
+  const val = Array.isArray(recipeYield) ? recipeYield.find(v => v != null) : recipeYield;
+  const m = String(val).match(/\d+/);
+  return m ? parseInt(m[0], 10) : null;
+}
+
 // Turn the Worker's raw recipe payload into the meal shape MealsTab renders:
-// { name, ingredients: [{ name, qty, unit, category }], recipeText, sourceUrl }.
-// Ingredient lines that parse to an empty name are dropped.
+// { name, ingredients: [{ name, qty, unit, category }], recipeText, sourceUrl, servings }.
+// Ingredient lines that parse to an empty name are dropped; names are cleaned +
+// Title-Cased via cleanIngredientName.
 export function parseRecipe(payload) {
   const p = payload || {};
   const lines = Array.isArray(p.ingredients) ? p.ingredients : [];
   const ingredients = lines
     .map(parseIngredientLine)
+    .map(i => ({ ...i, name: cleanIngredientName(i.name) }))
     .filter(i => i.name)
     .map(i => ({ ...i, category: guessCategory(i.name) }));
   return {
@@ -110,5 +121,6 @@ export function parseRecipe(payload) {
     ingredients,
     recipeText: p.recipeText || "",
     sourceUrl: p.sourceUrl || "",
+    servings: parseServings(p.recipeYield),
   };
 }

@@ -32,6 +32,7 @@ export function emptyMeta() {
     meals: {}, extraItems: {}, manualPlan: {}, groceryOverrides: {}, checkedItems: {}, prices: {}, stores: {}, qtyTypes: {},
     importedPlan: 0,
     planStart: 0,
+    weekCount: 0,
     del: { meals: {}, extraItems: {}, manualPlan: {}, groceryOverrides: {}, checkedItems: {}, prices: {}, stores: {}, qtyTypes: {} },
   };
 }
@@ -58,6 +59,7 @@ export function normalizeMeta(state) {
   }
   meta.importedPlan = clamp(src.importedPlan);
   meta.planStart = clamp(src.planStart);
+  meta.weekCount = clamp(src.weekCount);
   return { ...state, _meta: meta };
 }
 
@@ -69,6 +71,7 @@ function cloneMeta(m) {
   }
   out.importedPlan = m.importedPlan || 0;
   out.planStart = m.planStart || 0;
+  out.weekCount = m.weekCount || 0;
   return out;
 }
 
@@ -103,6 +106,8 @@ export function stampMeta(prev, next) {
     meta.importedPlan = t;
   if ((prev.planStart || "") !== (next.planStart || ""))
     meta.planStart = t;
+  if ((prev.weekCount || 1) !== (next.weekCount || 1))
+    meta.weekCount = t;
   return meta;
 }
 
@@ -173,6 +178,10 @@ export function mergeStates(local, cloud) {
   const psA = a.planStart, psB = b.planStart;
   out.planStart = (psA > psB ? local.planStart : cloud.planStart) || "";
   meta.planStart = Math.max(psA, psB);
+
+  const wcA = a.weekCount, wcB = b.weekCount;
+  out.weekCount = (wcA > wcB ? local.weekCount : cloud.weekCount) || 1;
+  meta.weekCount = Math.max(wcA, wcB);
 
   out._meta = gcTombstones(meta);
   return out;

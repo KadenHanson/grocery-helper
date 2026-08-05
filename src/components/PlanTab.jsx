@@ -64,13 +64,34 @@ function Section({ title, collapsed, onToggle, right, children }) {
   );
 }
 
-export default function PlanTab({ state, importPlan, clearImport, setManualDay, clearManualDay, setPlanStart, swapDays, swapImported, setImportedMeal }) {
+export default function PlanTab({ state, importPlan, clearImport, setManualDay, clearManualDay, setPlanStart, swapDays, swapImported, setImportedMeal, addWeek, removeLastWeek }) {
   const { meals, importedPlan, manualPlan, planStart } = state;
-  const [assignTarget, setAssignTarget] = useState(null); // { type:'manual', day } | { type:'imported', idx }
+  const weekCount = state.weekCount || 1;
+  const [assignTarget, setAssignTarget] = useState(null); // { type:'manual', day:"w:D" } | { type:'imported', idx }
   const [search, setSearch] = useState("");
   const [showPaste, setShowPaste] = useState(false);
   const [pasteText, setPasteText] = useState("");
   const [editMode, setEditMode] = useState(false);
+  const [viewWeekRaw, setViewWeekRaw] = useState(() => {
+    try { const v = parseInt(localStorage.getItem("plan_view_week"), 10); return isNaN(v) ? 0 : v; } catch { return 0; }
+  });
+  const vw = Math.min(Math.max(viewWeekRaw, 0), weekCount - 1); // clamp against current count
+  function gotoWeek(w) {
+    const c = Math.min(Math.max(w, 0), weekCount - 1);
+    setViewWeekRaw(c);
+    try { localStorage.setItem("plan_view_week", String(c)); } catch {}
+  }
+  function handleAddWeek() {
+    addWeek();
+    const w = weekCount; // new last index (count is still the pre-increment value here)
+    setViewWeekRaw(w);
+    try { localStorage.setItem("plan_view_week", String(w)); } catch {}
+  }
+  function handleRemoveWeek() {
+    if (weekCount <= 1) return;
+    removeLastWeek();
+    if (vw >= weekCount - 1) gotoWeek(weekCount - 2);
+  }
   const [cImport, setCImport] = useState(() => readBool("plan_c_import", true));
   const [cImported, setCImported] = useState(() => readBool("plan_c_imported", false));
   const [cManual, setCManual] = useState(() => readBool("plan_c_manual", false));
@@ -126,7 +147,7 @@ export default function PlanTab({ state, importPlan, clearImport, setManualDay, 
   const mealCost = (m) => (m?.ingredients || []).reduce((s, ing) => s + (priceOf(ing.name) || 0) * (ing.qty || 1), 0);
   const plannedMeals = [];
   importedPlan.forEach(e => { if (!e.special && e.matchedId) { const m = meals.find(x => x.id === e.matchedId); if (m) plannedMeals.push(m); } });
-  DAYS.forEach(d => { const id = manualPlan[d]; if (id && id !== "__GRILL__" && id !== "__LEFTOVER__") { const m = meals.find(x => x.id === id); if (m) plannedMeals.push(m); } });
+  DAYS.forEach(d => { const id = manualPlan[`${vw}:${d}`]; if (id && id !== "__GRILL__" && id !== "__LEFTOVER__") { const m = meals.find(x => x.id === id); if (m) plannedMeals.push(m); } });
   const weeklyTotal = plannedMeals.reduce((s, m) => s + mealCost(m), 0);
 
   const all = [...SPECIAL_OPTS, ...meals];
@@ -149,7 +170,7 @@ export default function PlanTab({ state, importPlan, clearImport, setManualDay, 
   // Shared meal-picker panel (used by both plans when assignTarget is set).
   const picker = assignTarget && (
     <Block>
-      <Label>{assignTarget.type === "manual" ? `Assign meal for ${DAY_NAMES[assignTarget.day] || assignTarget.day}` : "Change meal"}</Label>
+      <Label>{assignTarget.type === "manual" ? `Assign meal for ${DAY_NAMES[assignTarget.day.split(":")[1]] || assignTarget.day}` : "Change meal"}</Label>
       <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search meals…" autoFocus />
       <div style={{ maxHeight:220, overflowY:"auto", margin:"8px -16px 0" }}>
         {filtered.map(m => (
@@ -251,22 +272,36 @@ export default function PlanTab({ state, importPlan, clearImport, setManualDay, 
 
       {/* Manual assignments */}
       <Section title="Manual assignments" collapsed={cManual} onToggle={() => toggle("plan_c_manual", !cManual, setCManual)}>
+        {/* Week navigator */}
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, flexWrap:"wrap" }}>
+          <button onClick={() => gotoWeek(vw - 1)} disabled={vw === 0}
+            style={{ background:"var(--btn-bg)", border:"none", borderRadius:6, color: vw === 0 ? "var(--ghost)" : "var(--muted)", fontSize:15, width:28, height:28, cursor: vw === 0 ? "default" : "pointer" }}>‹</button>
+          <span style={{ fontSize:13, fontWeight:700, color:"var(--text-2)" }}>Week {vw + 1} of {weekCount}</span>
+          <span style={{ fontSize:11, color:"var(--faint)" }}>{dateLabel(vw * 7)}–{dateLabel(vw * 7 + 6)}</span>
+          <button onClick={() => gotoWeek(vw + 1)} disabled={vw === weekCount - 1}
+            style={{ background:"var(--btn-bg)", border:"none", borderRadius:6, color: vw === weekCount - 1 ? "var(--ghost)" : "var(--muted)", fontSize:15, width:28, height:28, cursor: vw === weekCount - 1 ? "default" : "pointer" }}>›</button>
+          <div style={{ marginLeft:"auto", display:"flex", gap:6 }}>
+            {weekCount > 1 && vw === weekCount - 1 && <BtnSm variant="danger" onClick={handleRemoveWeek}>Remove</BtnSm>}
+            <BtnSm onClick={handleAddWeek}>+ Week</BtnSm>
+          </div>
+        </div>
         <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:12, overflow:"hidden" }}>
           {DAYS.map((d, i) => {
-            const id = manualPlan[d];
+            const wk = `${vw}:${d}`;
+            const id = manualPlan[wk];
             const name = id ? getMealName(id) : null;
             const m = id && id !== "__GRILL__" && id !== "__LEFTOVER__" ? meals.find(x => x.id === id) : null;
             const c = m ? mealCost(m) : 0;
             return (
-              <div key={d} data-swapkey={d} style={{ ...rowStyle, borderTop: i === 0 ? "none" : rowStyle.borderTop, background: rowBg(d, manualSwap), cursor:"pointer" }}
-                onClick={editMode ? () => manualSwap.tap(d) : () => setAssignTarget({ type:"manual", day:d })}>
-                {editMode && <span style={handleStyle} onPointerDown={manualSwap.startDrag(d)}>⠿</span>}
+              <div key={wk} data-swapkey={wk} style={{ ...rowStyle, borderTop: i === 0 ? "none" : rowStyle.borderTop, background: rowBg(wk, manualSwap), cursor:"pointer" }}
+                onClick={editMode ? () => manualSwap.tap(wk) : () => setAssignTarget({ type:"manual", day:wk })}>
+                {editMode && <span style={handleStyle} onPointerDown={manualSwap.startDrag(wk)}>⠿</span>}
                 <span style={dayStyle}>{d}</span>
-                <span style={dateStyle}>{dateLabel(i)}</span>
+                <span style={dateStyle}>{dateLabel(vw * 7 + i)}</span>
                 <span style={{ flex:1, fontSize:13, color: name ? "var(--text-2)" : "var(--ghost)", fontStyle: name ? "normal" : "italic" }}>{name || "tap to set"}</span>
                 {c > 0 && <span style={{ fontSize:12, color:"var(--muted)" }}>${c.toFixed(2)}</span>}
-                {editMode && <span onClick={e => { e.stopPropagation(); setAssignTarget({ type:"manual", day:d }); }} style={{ cursor:"pointer", color:"var(--muted)", fontSize:14, padding:"0 4px" }}>✎</span>}
-                {!editMode && id && <span onClick={e => { e.stopPropagation(); clearManualDay(d); }} style={{ cursor:"pointer", color:"var(--ghost)", fontSize:16, padding:"0 4px" }}>✕</span>}
+                {editMode && <span onClick={e => { e.stopPropagation(); setAssignTarget({ type:"manual", day:wk }); }} style={{ cursor:"pointer", color:"var(--muted)", fontSize:14, padding:"0 4px" }}>✎</span>}
+                {!editMode && id && <span onClick={e => { e.stopPropagation(); clearManualDay(wk); }} style={{ cursor:"pointer", color:"var(--ghost)", fontSize:16, padding:"0 4px" }}>✕</span>}
               </div>
             );
           })}
