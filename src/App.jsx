@@ -120,6 +120,7 @@ export default function App() {
             state={store.state}
             addExtraItem={store.addExtraItem}
             deleteExtra={store.deleteExtra}
+            setExtra={store.setExtra}
             setOverride={store.setOverride}
             clearOverrides={store.clearOverrides}
             toggleChecked={store.toggleChecked}

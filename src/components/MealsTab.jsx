@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { CATEGORIES, guessCategory, priceKey } from "../constants";
-import { Card, Btn, Input, Label, Badge, EmptyState, TypeLabel, Autocomplete } from "./UI";
+import { Card, Btn, Input, Label, Badge, EmptyState, TypeLabel, Autocomplete, PriceInput } from "./UI";
 import { fetchRecipe } from "../storage";
 import { parseRecipe } from "../recipe";
 
@@ -122,12 +122,9 @@ export default function MealsTab({ meals, addMeal, importMeal, setMealRecipe, cl
   function priceCell(name) {
     const stored = priceOf(name);
     return (
-      <input type="number" inputMode="decimal" step="0.01" min="0" placeholder="$"
-        defaultValue={stored ?? ""} key={priceKey(name) + ":" + (stored ?? "")}
-        onFocus={e => e.target.select()}
-        onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
-        onBlur={e => { const v = e.target.value.trim(); if (String(v) !== String(stored ?? "")) setPrice(name, v); }}
-        style={{ width: 54, background: "var(--input-bg)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--muted)", fontSize: 11, padding: "3px 6px", outline: "none", textAlign: "right" }} />
+      <PriceInput defaultValue={stored ?? ""} valueKey={priceKey(name) + ":" + (stored ?? "")}
+        inputStyle={{ width: 58, background: "var(--input-bg)", fontSize: 11, padding: "3px 6px" }}
+        onCommit={v => { if (String(v) !== String(stored ?? "")) setPrice(name, v); }} />
     );
   }
 
@@ -345,9 +342,12 @@ export default function MealsTab({ meals, addMeal, importMeal, setMealRecipe, cl
                       <option value="">Category…</option>
                       {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
-                    <Input value={d.price||""} onChange={e => setDraft(meal.id,"price",e.target.value)}
-                      onKeyDown={e => e.key === "Enter" && handleAddIng(meal.id)}
-                      type="number" placeholder="$" style={{ width:60 }} />
+                    <span style={{ position:"relative", display:"inline-flex", alignItems:"center" }}>
+                      <span style={{ position:"absolute", left:9, fontSize:13, color:"var(--faint)", pointerEvents:"none" }}>$</span>
+                      <Input value={d.price||""} onChange={e => setDraft(meal.id,"price",e.target.value)}
+                        onKeyDown={e => e.key === "Enter" && handleAddIng(meal.id)}
+                        type="number" placeholder="" style={{ width:64, paddingLeft:20 }} />
+                    </span>
                     <Btn variant="primary" onClick={() => handleAddIng(meal.id)}>Add</Btn>
                   </div>
                 </div>

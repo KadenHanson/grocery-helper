@@ -74,7 +74,7 @@ function mergeState(saved) {
     manualPlan: rest.manualPlan || {},
   };
   s.extraItems = (s.extraItems || []).map(e =>
-    typeof e === "string" ? { id: genId("x"), name: e } : e
+    typeof e === "string" ? { id: genId("x"), name: e, qty: 1 } : { qty: 1, ...e }
   );
   migrateManualWeeks(s, rest.weekCount);
   return normalizeNames(normalizeMeta(s));
@@ -336,8 +336,12 @@ export function useStore() {
   }
 
   // ── Grocery ───────────────────────────────────────────────────────────────
-  function addExtraItem(val) { update(s => ({ ...s, extraItems: [...s.extraItems, { id: genId("x"), name: titleCaseName(val) }] })); }
+  function addExtraItem(val, qty = 1) { update(s => ({ ...s, extraItems: [...s.extraItems, { id: genId("x"), name: titleCaseName(val), qty: qty || 1 }] })); }
   function deleteExtra(id) { update(s => ({ ...s, extraItems: s.extraItems.filter(e => e.id !== id) })); }
+  // Edit an extra's name/qty in place (from the unified Manage list).
+  function setExtra(id, patch) {
+    update(s => ({ ...s, extraItems: s.extraItems.map(e => e.id !== id ? e : { ...e, ...patch, name: patch.name != null ? titleCaseName(patch.name) : e.name }) }));
+  }
 
   function setOverride(key, data) {
     update(s => ({ ...s, groceryOverrides: { ...s.groceryOverrides, [key]: data } }));
@@ -427,7 +431,7 @@ export function useStore() {
     addIngredient, deleteIngredient, setIngCategory, setIngredientQty,
     importPlan, clearImport, setManualDay, clearManualDay,
     setPlanStart, swapDays, swapImported, setImportedMeal, addWeek, removeLastWeek,
-    addExtraItem, deleteExtra, setOverride, clearOverrides,
+    addExtraItem, deleteExtra, setExtra, setOverride, clearOverrides,
     toggleChecked, clearChecked, setPrice, setStore, setQtyType,
     restoreBackup, syncNow, pullNow,
   };

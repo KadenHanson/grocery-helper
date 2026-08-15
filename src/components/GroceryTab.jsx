@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { DAYS, WEEKDAY_TO_SHORT, CATEGORIES, STORES, guessStore, priceKey, TAX_RATE } from "../constants";
+import { DAYS, WEEKDAY_TO_SHORT, CATEGORIES, STORES, guessStore, guessCategory, priceKey, TAX_RATE } from "../constants";
 import { aggregateIngredients, applyOverrides } from "../useStore";
-import { Btn, BtnSm, Input, Label, Block, EmptyState, QtyTag } from "./UI";
+import { Btn, BtnSm, Input, Label, Block, EmptyState, QtyTag, PriceInput } from "./UI";
 
-export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverride, clearOverrides, toggleChecked, clearChecked, setPrice, setStore, setQtyType }) {
+export default function GroceryTab({ state, addExtraItem, deleteExtra, setExtra, setOverride, clearOverrides, toggleChecked, clearChecked, setPrice, setStore, setQtyType }) {
   const { importedPlan, manualPlan, extraItems, groceryOverrides, meals, checkedItems, prices, stores, qtyTypes } = state;
   const [view, setView] = useState("manage"); // manage | shop
   const [exportMode, setExportMode] = useState("grocery");
@@ -37,11 +37,29 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
   const qtyTypeOf = (name) => qtyMap[priceKey(name)] === "meal" ? "meal" : "ind";
   const toggleQtyType = (name) => setQtyType(name, qtyTypeOf(name) === "meal" ? "ind" : "meal");
 
-  // Unified item list used by both views (ingredients + extras).
-  const items = [
-    ...agg.map(i => ({ kind: "ing", name: i.name, qty: i.qty, category: i.category || "Other", checkKey: "i:" + i.name.toLowerCase() })),
-    ...extraItems.map(e => ({ kind: "extra", name: e.name, qty: 1, category: "Other", checkKey: "x:" + e.id })),
-  ];
+  // Unified item list used by every view + the totals. Extras fold into the
+  // aggregated ingredients by lowercased name: an extra whose name matches a
+  // planned ingredient adds its qty to that row (and tags it with extraId so it
+  // stays removable); non-matching extras become their own categorized rows.
+  // One de-duplicated, categorized, name-keyed (`i:<name>`) list — so adding
+  // "butter" as an extra when it's already needed just bumps the one row.
+  const itemMap = new Map();
+  agg.forEach(i => {
+    const key = i.name.toLowerCase();
+    itemMap.set(key, { name: i.name, qty: i.qty, category: i.category || guessCategory(i.name), key, fromMeals: true, extraId: null, checkKey: "i:" + key });
+  });
+  extraItems.forEach(e => {
+    const key = e.name.toLowerCase();
+    const q = e.qty || 1;
+    const row = itemMap.get(key);
+    if (row) { row.qty += q; row.extraId = e.id; }
+    else itemMap.set(key, { name: e.name, qty: q, category: guessCategory(e.name), key, fromMeals: false, extraId: e.id, checkKey: "i:" + key });
+  });
+  const items = [...itemMap.values()].sort((a, b) => {
+    const ai = CATEGORIES.indexOf(a.category), bi = CATEGORIES.indexOf(b.category);
+    const diff = (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    return diff !== 0 ? diff : a.name.localeCompare(b.name);
+  });
   const totalItems = items.length;
   const checkedCount = items.filter(it => checked[it.checkKey]).length;
   const estTotal = items.reduce((s, it) => s + (priceOf(it.name) || 0) * (it.qty || 1), 0);
@@ -60,15 +78,29 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
     setTimeout(() => setToast(null), 2000);
   }
 
-  function startEdit(item) {
-    setEditingKey(item.name.toLowerCase());
-    setEditName(item.name);
-    setEditQty(String(item.qty));
+  function startEdit(it) {
+    setEditingKey(it.key);
+    setEditName(it.name);
+    setEditQty(String(it.qty));
   }
-  function saveEdit(key) {
-    if (!editName.trim()) return;
-    setOverride(key, { name: editName.trim(), qty: parseFloat(editQty) || 1 });
+  // Save an inline edit. Meal-derived rows write a grocery override; a pure extra
+  // updates the extra. A merged row (both) becomes a single override at the typed
+  // total, and its extra is folded in (deleted) so it stops double-counting.
+  function saveItemEdit(it) {
+    const name = editName.trim();
+    if (!name) return;
+    const qty = parseFloat(editQty) || 1;
+    if (it.fromMeals) {
+      setOverride(it.key, { name, qty });
+      if (it.extraId) deleteExtra(it.extraId);
+    } else {
+      setExtra(it.extraId, { name, qty });
+    }
     setEditingKey(null);
+  }
+  function deleteItem(it) {
+    if (it.fromMeals) setOverride(it.key, null);
+    if (it.extraId) deleteExtra(it.extraId);
   }
   function handleAddExtra() {
     if (!newExtra.trim()) return;
@@ -84,12 +116,10 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
   function buildExport() {
     if (exportMode === "anylist") {
       // AnyList bulk-add: one clean item name per line (it splits on line breaks).
-      return [...agg.map(i => i.name), ...extraItems.map(e => e.name)].join("\n");
+      return items.map(i => i.name).join("\n");
     }
     if (exportMode === "grocery") {
-      const lines = agg.map(i => i.qty > 1 ? `${i.name} (${i.qty})` : i.name);
-      if (extraItems.length) { lines.push(""); extraItems.forEach(e => lines.push(e.name)); }
-      return lines.join("\n");
+      return items.map(i => i.qty > 1 ? `${i.name} (${i.qty})` : i.name).join("\n");
     }
     if (exportMode === "notes") {
       const today = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
@@ -101,9 +131,8 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
         const id = manualPlan[d];
         if (id) dinnerLines.push(`${d}- ${getMealName(id)}`);
       });
-      const ingLines = agg.map(i => `- ${i.name}${i.qty > 1 ? ` (${i.qty})` : ""}`);
+      const ingLines = items.map(i => `- ${i.name}${i.qty > 1 ? ` (${i.qty})` : ""}`);
       const out = [`Week of: ${today}`, "", "DINNER", ...dinnerLines, "", "GROCERIES", ...ingLines];
-      if (extraItems.length) { out.push(""); out.push("OTHER"); extraItems.forEach(e => out.push(`- ${e.name}`)); }
       return out.join("\n");
     }
     return JSON.stringify({ version: 1, meals: state.meals }, null, 2);
@@ -132,20 +161,14 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
   const itemBodyStyle = { flex: 1, padding: "13px 0", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, minWidth: 0 };
   const itemDelStyle = { display: "flex", alignItems: "center", justifyContent: "center", width: 44, flexShrink: 0, borderLeft: "1px solid var(--border-soft)", marginLeft: 8, cursor: "pointer", color: "var(--ghost)", fontSize: 18 };
   const itemStyle = { fontSize: 13, color: "var(--text-2)", display: "flex", alignItems: "stretch", borderBottom: "1px solid var(--border-soft)", margin: "0 -16px", padding: "0 16px" };
-  const nameStyle = (on) => ({ flex: 1, textDecoration: on ? "line-through" : "none", color: on ? "var(--faint)" : undefined });
-  const priceInputStyle = { width: 56, flexShrink: 0, alignSelf: "center", marginLeft: 8, background: "var(--inset)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--muted)", fontSize: 12, padding: "5px 6px", fontFamily: "inherit", textAlign: "right" };
   const storeSelectStyle = { width: 92, flexShrink: 0, alignSelf: "center", marginLeft: 8, background: "var(--inset)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--muted)", fontSize: 11, padding: "5px 4px", fontFamily: "inherit" };
 
   function priceCell(name) {
     const stored = priceOf(name);
     return (
-      <input type="number" inputMode="decimal" step="0.01" min="0" placeholder="$"
-        defaultValue={stored ?? ""} key={(name || "").toLowerCase() + ":" + (stored ?? "")}
-        onClick={e => e.stopPropagation()}
-        onFocus={e => e.target.select()}
-        onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
-        onBlur={e => { const v = e.target.value.trim(); if (String(v) !== String(stored ?? "")) setPrice(name, v); }}
-        style={priceInputStyle} />
+      <PriceInput defaultValue={stored ?? ""} valueKey={(name || "").toLowerCase() + ":" + (stored ?? "")}
+        stopClick wrapperStyle={{ marginLeft: 8, alignSelf: "center" }} inputStyle={{ width: 62 }}
+        onCommit={v => { if (String(v) !== String(stored ?? "")) setPrice(name, v); }} />
     );
   }
   function storeCell(name) {
@@ -229,59 +252,46 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setOverri
 
       {view === "manage" ? (
         <>
-          {/* Ingredients */}
-          {(agg.length > 0 || rawAgg.length > 0) ? (
-            <Block>
-              <div style={{ display: "flex", alignItems: "center", marginBottom: 6, gap: 8 }}>
-                <Label style={{ margin: 0 }}>Ingredients needed</Label>
-                {hasOverrides && <BtnSm onClick={clearOverrides} style={{ marginLeft: "auto" }}>Reset edits</BtnSm>}
-              </div>
-              {agg.map(i => {
-                const key = i.name.toLowerCase();
-                if (editingKey === key) {
+          {/* Unified grocery list: planned ingredients + extras, categorized and
+              de-duplicated. Add-item input feeds the same list as extras. */}
+          <Block>
+            <div style={{ display: "flex", alignItems: "center", marginBottom: 6, gap: 8 }}>
+              <Label style={{ margin: 0 }}>Grocery list</Label>
+              {hasOverrides && <BtnSm onClick={clearOverrides} style={{ marginLeft: "auto" }}>Reset edits</BtnSm>}
+            </div>
+            {items.length === 0 ? (
+              <div style={{ fontSize: 13, color: "var(--ghost)", padding: "6px 0" }}>Nothing yet — plan meals or add an item below.</div>
+            ) : byCategory(items).map(cg => (
+              <div key={cg.category}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: "var(--ghost)", textTransform: "uppercase", margin: "10px 0 2px" }}>{cg.category}</div>
+                {cg.items.map(it => {
+                  if (editingKey === it.key) {
+                    return (
+                      <div key={it.key} style={{ ...itemStyle, flexWrap: "wrap", padding: "10px 16px", gap: 6, alignItems: "center" }}>
+                        <Input value={editName} onChange={e => setEditName(e.target.value)}
+                          onKeyDown={e => e.key === "Enter" && saveItemEdit(it)}
+                          style={{ flex: 2, minWidth: 120 }} autoFocus />
+                        <Input value={editQty} onChange={e => setEditQty(e.target.value)} type="number" style={{ width: 64 }} />
+                        <Btn variant="primary" onClick={() => saveItemEdit(it)} style={{ padding: "7px 12px", fontSize: 12 }}>Save</Btn>
+                        <Btn onClick={() => setEditingKey(null)} style={{ padding: "7px 12px", fontSize: 12 }}>Cancel</Btn>
+                      </div>
+                    );
+                  }
                   return (
-                    <div key={key} style={{ ...itemStyle, flexWrap: "wrap", padding: "10px 16px", gap: 6, alignItems: "center" }}>
-                      <Input value={editName} onChange={e => setEditName(e.target.value)}
-                        onKeyDown={e => e.key === "Enter" && saveEdit(key)}
-                        style={{ flex: 2, minWidth: 120 }} autoFocus />
-                      <Input value={editQty} onChange={e => setEditQty(e.target.value)} type="number" style={{ width: 64 }} />
-                      <Btn variant="primary" onClick={() => saveEdit(key)} style={{ padding: "7px 12px", fontSize: 12 }}>Save</Btn>
-                      <Btn onClick={() => setEditingKey(null)} style={{ padding: "7px 12px", fontSize: 12 }}>Cancel</Btn>
+                    <div key={it.key} style={itemStyle}>
+                      <div style={itemBodyStyle} onClick={() => startEdit(it)}>
+                        <span style={{ flex: 1 }}>{it.name}</span>
+                        <QtyTag qty={it.qty} type={qtyTypeOf(it.name)} onToggle={() => toggleQtyType(it.name)} />
+                      </div>
+                      {storeCell(it.name)}
+                      {priceCell(it.name)}
+                      <div style={itemDelStyle} onClick={() => deleteItem(it)}>✕</div>
                     </div>
                   );
-                }
-                return (
-                  <div key={key} style={itemStyle}>
-                    <div style={itemBodyStyle} onClick={() => startEdit(i)}>
-                      <span style={{ flex: 1 }}>{i.name}</span>
-                      <QtyTag qty={i.qty} type={qtyTypeOf(i.name)} onToggle={() => toggleQtyType(i.name)} />
-                    </div>
-                    {storeCell(i.name)}
-                    {priceCell(i.name)}
-                    <div style={itemDelStyle} onClick={() => setOverride(key, null)}>✕</div>
-                  </div>
-                );
-              })}
-            </Block>
-          ) : (
-            <EmptyState>No meals planned — import a plan or assign meals manually.</EmptyState>
-          )}
-
-          {/* Extra items */}
-          <Block>
-            <Label>Extra items</Label>
-            {extraItems.map((item, i) => (
-              <div key={item.id} style={{ ...itemStyle, marginBottom: i === extraItems.length - 1 ? 8 : 0 }}>
-                <div style={{ ...itemBodyStyle, cursor: "default" }}>
-                  <span style={{ flex: 1 }}>{item.name}</span>
-                  <QtyTag qty={1} type={qtyTypeOf(item.name)} onToggle={() => toggleQtyType(item.name)} />
-                </div>
-                {storeCell(item.name)}
-                {priceCell(item.name)}
-                <div style={itemDelStyle} onClick={() => deleteExtra(item.id)}>✕</div>
+                })}
               </div>
             ))}
-            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               <Input value={newExtra} onChange={e => setNewExtra(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && handleAddExtra()} placeholder="Add item…" />
               <Btn variant="primary" onClick={handleAddExtra} style={{ whiteSpace: "nowrap" }}>Add</Btn>

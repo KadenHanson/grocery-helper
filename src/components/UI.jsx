@@ -55,6 +55,29 @@ export function Input({ value, onChange, onKeyDown, onFocus, placeholder, type, 
   );
 }
 
+// Price entry field: a leading "$" glyph plus a right-aligned number input,
+// committed on blur/Enter. Uncontrolled — pass `valueKey` so it remounts when
+// the stored value changes elsewhere. onCommit receives the trimmed string.
+export function PriceInput({ defaultValue, valueKey, onCommit, inputStyle, wrapperStyle, stopClick }) {
+  const merged = {
+    background:"var(--inset)", border:"1px solid var(--border)", borderRadius:6,
+    color:"var(--muted)", fontSize:12, padding:"5px 6px", fontFamily:"inherit",
+    textAlign:"right", outline:"none", ...inputStyle,
+  };
+  return (
+    <span style={{ position:"relative", display:"inline-flex", alignItems:"center", flexShrink:0, ...wrapperStyle }}>
+      <span style={{ position:"absolute", left:6, fontSize:merged.fontSize, color:"var(--faint)", pointerEvents:"none", lineHeight:1 }}>$</span>
+      <input type="number" inputMode="decimal" step="0.01" min="0"
+        defaultValue={defaultValue ?? ""} key={valueKey}
+        onClick={stopClick ? (e => e.stopPropagation()) : undefined}
+        onFocus={e => e.target.select()}
+        onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
+        onBlur={e => onCommit(e.target.value.trim())}
+        style={{ ...merged, paddingLeft:15 }} />
+    </span>
+  );
+}
+
 export function Label({ children }) {
   return <span style={{ fontSize:11, fontWeight:700, letterSpacing:"0.08em", color:"var(--ghost)", textTransform:"uppercase", marginBottom:6, display:"block" }}>{children}</span>;
 }
