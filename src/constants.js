@@ -9,7 +9,7 @@ export const CATEGORIES = [
 ];
 
 // Stores you can assign items to (remembered per item). "Unassigned" is implicit.
-export const STORES = ["Walmart", "Sam's Club", "Costco"];
+export const STORES = ["Walmart", "Sam's Club", "Costco", "Target", "Publix"];
 
 export const CAT_KEYWORDS = {
   "Meat & Protein": ["chicken","beef","sausage","pork","turkey","steak","meat","bacon","shrimp","fish","salmon","tuna","ham"],
@@ -101,13 +101,40 @@ export function cleanIngredientName(s) {
   return titleCaseName(words.join(" "));
 }
 
-// Rough default store when none is explicitly set. Meat & milk are usually a
-// Costco run; most everything else is Walmart. Sam's Club is specific enough
-// that it's left to manual assignment (never auto-guessed).
+// Generic default store, used only as the last resort when a household has no
+// learned pattern yet (see makeStoreGuesser). Meat & milk lean Costco; most
+// everything else is Walmart.
 const COSTCO_HINTS = ["milk", ...CAT_KEYWORDS["Meat & Protein"]];
 export function guessStore(name) {
   const n = (name || "").toLowerCase();
   return COSTCO_HINTS.some(k => n.includes(k)) ? "Costco" : "Walmart";
+}
+
+// Learn each household's store patterns from its OWN explicit assignments, so
+// the fallback guess reflects that household instead of one hardcoded shopper.
+// Pass the `stores` map ({lowercased name: store}); returns a guess(name):
+//   1. the store they most often use for items in the SAME category
+//      (assign beef → Walmart and the next meat item guesses Walmart; put
+//       cheese at Sam's Club and the next dairy item guesses Sam's Club),
+//   2. else their overall most-used store,
+//   3. else the generic guessStore default (only before anything is assigned).
+// Explicit per-item assignments still win outright (handled by the caller).
+export function makeStoreGuesser(storesMap) {
+  const byCat = {};   // category -> { store: count }
+  const overall = {}; // store -> count
+  for (const [name, store] of Object.entries(storesMap || {})) {
+    if (!store) continue;
+    const cat = guessCategory(name);
+    const c = byCat[cat] || (byCat[cat] = {});
+    c[store] = (c[store] || 0) + 1;
+    overall[store] = (overall[store] || 0) + 1;
+  }
+  const top = (counts) => {
+    let best = null, bestN = 0;
+    for (const s in counts) if (counts[s] > bestN) { bestN = counts[s]; best = s; }
+    return best;
+  };
+  return (name) => top(byCat[guessCategory(name)]) || top(overall) || guessStore(name);
 }
 
 export function normalize(s) {

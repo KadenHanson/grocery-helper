@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { STORES, guessStore, priceKey } from "../constants";
+import { STORES, makeStoreGuesser, priceKey } from "../constants";
 import { Btn, BtnSm, Input, Block, EmptyState, PriceInput } from "./UI";
 
 // Bare quantity (no meal/ind qualifier — one-offs are always individual).
@@ -26,7 +26,8 @@ export default function OneOffLists({
   const goCompleted = () => { sweepCompletedOneoffs(); setSub("completed"); };
 
   const priceOf = (name) => (prices || {})[priceKey(name)];
-  const storeOf = (name) => (stores || {})[(name || "").trim().toLowerCase()] || guessStore(name);
+  const storeGuess = makeStoreGuesser(stores || {});
+  const storeOf = (name) => (stores || {})[(name || "").trim().toLowerCase()] || storeGuess(name);
   const lineTotal = (it) => (priceOf(it.name) || 0) * (it.qty || 1);
   const listTotal = (l) => l.items.reduce((s, it) => s + lineTotal(it), 0);
 

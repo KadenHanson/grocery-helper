@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { DAYS, WEEKDAY_TO_SHORT, CATEGORIES, STORES, guessStore, guessCategory, priceKey, TAX_RATE } from "../constants";
+import { DAYS, WEEKDAY_TO_SHORT, CATEGORIES, STORES, makeStoreGuesser, guessCategory, priceKey, TAX_RATE } from "../constants";
 import { aggregateIngredients, applyOverrides } from "../useStore";
 import { Btn, BtnSm, Input, Label, Block, EmptyState, QtyTag, PriceInput } from "./UI";
 import OneOffLists from "./OneOffLists";
@@ -34,9 +34,11 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setExtra,
   const storeMap = stores || {};
   const priceOf = (name) => priceMap[priceKey(name)];
   const storeRaw = (name) => storeMap[(name || "").trim().toLowerCase()] || "";
-  // Effective store: explicit assignment, else a fuzzy guess (meat/milk→Costco,
-  // most else→Walmart). Used for both the Shop grouping and the Manage picker.
-  const storeOf = (name) => storeRaw(name) || guessStore(name);
+  // Effective store: explicit assignment, else a guess learned from THIS
+  // household's own assignments (most-used store for the item's category, then
+  // overall, then a generic default). Used for Shop grouping + the Manage picker.
+  const storeGuess = makeStoreGuesser(storeMap);
+  const storeOf = (name) => storeRaw(name) || storeGuess(name);
   // Quantity qualifier (display-only): "meal" (meals-worth) vs "ind" (individual).
   const qtyMap = qtyTypes || {};
   const qtyTypeOf = (name) => qtyMap[priceKey(name)] === "meal" ? "meal" : "ind";
