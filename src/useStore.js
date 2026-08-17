@@ -13,6 +13,7 @@ const DEFAULT_STATE = {
   prices: {},
   stores: {},
   qtyTypes: {},
+  oneoffLists: [],
   planStart: "",
   weekCount: 1,
 };
@@ -29,6 +30,10 @@ function normalizeNames(state) {
       ingredients: (m.ingredients || []).map(i => ({ ...i, name: titleCaseName(i.name) })),
     })),
     extraItems: (state.extraItems || []).map(e => ({ ...e, name: titleCaseName(e.name) })),
+    oneoffLists: (state.oneoffLists || []).map(l => ({
+      ...l,
+      items: (l.items || []).map(it => ({ ...it, name: titleCaseName(it.name) })),
+    })),
   };
 }
 
@@ -72,6 +77,7 @@ function mergeState(saved) {
     qtyTypes: rest.qtyTypes || {},
     planStart: rest.planStart || "",
     manualPlan: rest.manualPlan || {},
+    oneoffLists: rest.oneoffLists || [],
   };
   s.extraItems = (s.extraItems || []).map(e =>
     typeof e === "string" ? { id: genId("x"), name: e, qty: 1 } : { qty: 1, ...e }
@@ -343,6 +349,52 @@ export function useStore() {
     update(s => ({ ...s, extraItems: s.extraItems.map(e => e.id !== id ? e : { ...e, ...patch, name: patch.name != null ? titleCaseName(patch.name) : e.name }) }));
   }
 
+  // ── One-off lists ─────────────────────────────────────────────────────────
+  // Standalone ad-hoc lists (a mid-week store run), separate from the meal-plan
+  // grocery list. Each list owns its items + per-item checked map and carries a
+  // created/completed timestamp; prices + stores reuse the shared global maps
+  // (keyed by name), so a one-off item inherits any remembered price/store.
+  // The whole list is one merge entity (id-keyed like meals) — see merge.js.
+  const editList = (id, fn) => update(s => ({ ...s, oneoffLists: (s.oneoffLists || []).map(l => l.id !== id ? l : fn(l)) }));
+
+  function addOneoffList(name = "") {
+    const id = genId("ol");
+    const created = new Date().toISOString();
+    update(s => ({ ...s, oneoffLists: [...(s.oneoffLists || []), { id, name: name.trim(), createdAt: created, completedAt: null, items: [], checked: {} }] }));
+    return id;
+  }
+  function deleteOneoffList(id) { update(s => ({ ...s, oneoffLists: (s.oneoffLists || []).filter(l => l.id !== id) })); }
+  function renameOneoffList(id, name) { editList(id, l => ({ ...l, name: (name || "").trim() })); }
+  function completeOneoffList(id) { editList(id, l => l.completedAt ? l : ({ ...l, completedAt: new Date().toISOString() })); }
+  function reopenOneoffList(id) { editList(id, l => ({ ...l, completedAt: null })); }
+
+  function addOneoffItem(listId, name, qty = 1) {
+    const nm = titleCaseName(name);
+    editList(listId, l => ({ ...l, items: [...l.items, { id: genId("oi"), name: nm, qty: qty || 1, category: guessCategory(nm) }] }));
+  }
+  function setOneoffItem(listId, itemId, patch) {
+    editList(listId, l => ({ ...l, items: l.items.map(it => it.id !== itemId ? it : { ...it, ...patch, name: patch.name != null ? titleCaseName(patch.name) : it.name }) }));
+  }
+  function deleteOneoffItem(listId, itemId) {
+    editList(listId, l => { const checked = { ...l.checked }; delete checked[itemId]; return { ...l, items: l.items.filter(it => it.id !== itemId), checked }; });
+  }
+  function toggleOneoffChecked(listId, itemId) {
+    editList(listId, l => { const checked = { ...l.checked }; if (checked[itemId]) delete checked[itemId]; else checked[itemId] = true; return { ...l, checked }; });
+  }
+  // Auto-archive: any active list that has items and is fully checked becomes
+  // completed. Called when leaving the Active view (see OneOffLists).
+  function sweepCompletedOneoffs() {
+    update(s => {
+      const now = new Date().toISOString();
+      let changed = false;
+      const oneoffLists = (s.oneoffLists || []).map(l => {
+        if (l.completedAt || !l.items.length || !l.items.every(it => l.checked[it.id])) return l;
+        changed = true; return { ...l, completedAt: now };
+      });
+      return changed ? { ...s, oneoffLists } : s;
+    });
+  }
+
   function setOverride(key, data) {
     update(s => ({ ...s, groceryOverrides: { ...s.groceryOverrides, [key]: data } }));
   }
@@ -432,6 +484,8 @@ export function useStore() {
     importPlan, clearImport, setManualDay, clearManualDay,
     setPlanStart, swapDays, swapImported, setImportedMeal, addWeek, removeLastWeek,
     addExtraItem, deleteExtra, setExtra, setOverride, clearOverrides,
+    addOneoffList, deleteOneoffList, renameOneoffList, completeOneoffList, reopenOneoffList,
+    addOneoffItem, setOneoffItem, deleteOneoffItem, toggleOneoffChecked, sweepCompletedOneoffs,
     toggleChecked, clearChecked, setPrice, setStore, setQtyType,
     restoreBackup, syncNow, pullNow,
   };

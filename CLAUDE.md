@@ -40,12 +40,13 @@ All mutations funnel through `update(updater)`, which:
 ### The state shape
 
 ```
-{ meals, importedPlan, manualPlan, extraItems, groceryOverrides, checkedItems, prices, stores, qtyTypes, planStart, weekCount, _meta }
+{ meals, importedPlan, manualPlan, extraItems, groceryOverrides, checkedItems, prices, stores, qtyTypes, oneoffLists, planStart, weekCount, _meta }
 ```
 - `meals` — the library: `[{id, name, ingredients:[{name, qty, unit, category}], recipeText?, sourceUrl?, servings?}]`. `recipeText`/`sourceUrl` are optional per-meal recipe references (a plain-text snapshot + link), set on any meal via the Meals tab or filled by import; `servings` records the recipe's yield. They ride the existing id-keyed meal merge — no new `_meta`/`KEYED` plumbing. Import is a Meals-tab flow with two modes: **URL** (Worker's secret-gated `GET /recipe?url=`, browser can't fetch cross-origin) and **paste text** (offline, no backend). Both run through `src/recipe.js` (pure) — `parseRecipe` parses free-text ingredient lines, cleans + Title-Cases names (`cleanIngredientName`), and reads `recipeYield` into `servings`; a confirm screen (with servings-based scaling) lets the user fix everything before saving. Ingredient/extra names are Title-Cased everywhere via `titleCaseName` (idempotent, applied on every hydrate — casing is display-only since all keys lowercase).
 - `importedPlan` — a pasted/parsed week (bulk-replaced, no per-row identity)
 - `manualPlan` — `{"week:day": mealId}` (0-based week, e.g. `"0:S"`, `"1:M"`), supporting multi-week planning; `mealId` may be a special sentinel `__GRILL__` or `__LEFTOVER__`. Legacy single-week docs (bare-day keys) migrate to week 0 in `mergeState` (values **and** `_meta` stamps remapped).
-- `extraItems` — `[{id, name}]` (ad-hoc grocery additions; **was** `string[]` before the sync work — legacy strings are migrated on load in `mergeState`)
+- `extraItems` — `[{id, name, qty}]` (ad-hoc additions to **this week's** meal-plan list; **was** `string[]` then `{id,name}` — legacy shapes migrated on load in `mergeState`). In `GroceryTab` these fold into the aggregated ingredient list **by lowercased name** (an extra matching a planned ingredient bumps that row's qty rather than duplicating it), producing one categorized, name-keyed (`i:<name>`) list that drives every view + the totals + exports.
+- `oneoffLists` — `[{id, name, createdAt, completedAt|null, items:[{id,name,qty,category}], checked:{itemId:true}}]` — standalone ad-hoc lists (a mid-week store run), **separate** from the meal plan. Each list is one id-keyed merge entity (its `items`/`checked` ride inside the object: whole-list last-writer-wins). Prices/stores reuse the shared global maps (keyed by name). A list auto-archives (sets `completedAt`) when it's fully checked and you leave the Active view — `sweepCompletedOneoffs()` — or via a manual "Mark done". Rendered by `OneOffLists.jsx`; dates use `Date.now()` (client-only, fine outside workflow scripts).
 - `groceryOverrides` — `{ingredientKey: patch | null}`; `null` means "remove this line from the list"
 - `checkedItems` — `{key: true}` shopping-checklist state; keys prefixed `i:`<lowercased ingredient name> or `x:`<extra id>. Unchecking deletes the key (tombstone).
 - `prices` — `{lowercased item name: number}` remembered unit prices (keyed by name so they carry across weeks); drives the estimated-total readout.
@@ -55,9 +56,9 @@ All mutations funnel through `update(updater)`, which:
 - `weekCount` — number of manual-plan weeks (default 1). A versioned scalar in `_meta` (mirrors `planStart`). Plan tab has a week navigator (+ add / remove-last week); Grocery tab has a per-week selector (default "All") via `aggregateIngredients(state, weekFilter)`.
 - `_meta` — sync bookkeeping (see below); strip `_backup`/`_date` wrapper keys when importing a backup
 
-All of `meals`/`extraItems`/`manualPlan`/`groceryOverrides`/`checkedItems`/`prices`/`stores`/`qtyTypes` are the merge-tracked collections (the `KEYED` list in `merge.js`) — adding a new synced map means registering it there too.
+All of `meals`/`extraItems`/`manualPlan`/`groceryOverrides`/`checkedItems`/`prices`/`stores`/`qtyTypes`/`oneoffLists` are the merge-tracked collections (the `KEYED` list in `merge.js`) — adding a new synced map means registering it there too (KEYED + `emptyMeta` + `stampMeta` + `mergeStates`).
 
-`GroceryTab.jsx` has two sub-views (local `view` state): **Manage** (edit items, set price + store, add extras, export) and **Shop** (big-checkbox checklist grouped by store → category, with per-store and overall totals + progress).
+`GroceryTab.jsx` has a top-level mode switch (local `mode`, persisted to `localStorage`): **Meal plan** vs **One-off**. Meal plan has two sub-views (`view`): **Manage** (edit items, set price + store, add items, export) and **Shop** (big-checkbox checklist grouped by store → category, with per-store and overall totals + progress). One-off renders `OneOffLists.jsx` with **Active** / **Completed** sub-views.
 
 ### Derived data (not stored)
 

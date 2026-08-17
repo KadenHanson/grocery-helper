@@ -128,6 +128,16 @@ export default function App() {
             setPrice={store.setPrice}
             setStore={store.setStore}
             setQtyType={store.setQtyType}
+            addOneoffList={store.addOneoffList}
+            deleteOneoffList={store.deleteOneoffList}
+            renameOneoffList={store.renameOneoffList}
+            completeOneoffList={store.completeOneoffList}
+            reopenOneoffList={store.reopenOneoffList}
+            addOneoffItem={store.addOneoffItem}
+            setOneoffItem={store.setOneoffItem}
+            deleteOneoffItem={store.deleteOneoffItem}
+            toggleOneoffChecked={store.toggleOneoffChecked}
+            sweepCompletedOneoffs={store.sweepCompletedOneoffs}
           />
         )}
       </main>

@@ -2,9 +2,14 @@ import { useState } from "react";
 import { DAYS, WEEKDAY_TO_SHORT, CATEGORIES, STORES, guessStore, guessCategory, priceKey, TAX_RATE } from "../constants";
 import { aggregateIngredients, applyOverrides } from "../useStore";
 import { Btn, BtnSm, Input, Label, Block, EmptyState, QtyTag, PriceInput } from "./UI";
+import OneOffLists from "./OneOffLists";
 
-export default function GroceryTab({ state, addExtraItem, deleteExtra, setExtra, setOverride, clearOverrides, toggleChecked, clearChecked, setPrice, setStore, setQtyType }) {
+export default function GroceryTab({ state, addExtraItem, deleteExtra, setExtra, setOverride, clearOverrides, toggleChecked, clearChecked, setPrice, setStore, setQtyType,
+  addOneoffList, deleteOneoffList, renameOneoffList, completeOneoffList, reopenOneoffList,
+  addOneoffItem, setOneoffItem, deleteOneoffItem, toggleOneoffChecked, sweepCompletedOneoffs }) {
   const { importedPlan, manualPlan, extraItems, groceryOverrides, meals, checkedItems, prices, stores, qtyTypes } = state;
+  const [mode, setMode] = useState(() => { try { return localStorage.getItem("gh_grocery_mode") || "mealplan"; } catch { return "mealplan"; } }); // mealplan | oneoff
+  function pickMode(m) { setMode(m); try { localStorage.setItem("gh_grocery_mode", m); } catch {} }
   const [view, setView] = useState("manage"); // manage | shop
   const [exportMode, setExportMode] = useState("grocery");
   const [newExtra, setNewExtra] = useState("");
@@ -216,6 +221,22 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setExtra,
       <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.03em", color: "var(--heading)", margin: "16px 0 4px" }}>Grocery List</h1>
       <p style={{ fontSize: 13, color: "var(--faint)", marginBottom: 16 }}>{total ? `From ${total} planned meal${total !== 1 ? "s" : ""}` : "No meals planned yet"}</p>
 
+      {/* Meal-plan list vs standalone one-off lists */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+        {pill(mode === "mealplan", () => pickMode("mealplan"), "Meal plan")}
+        {pill(mode === "oneoff", () => pickMode("oneoff"), "One-off")}
+      </div>
+
+      {mode === "oneoff" ? (
+        <OneOffLists
+          lists={state.oneoffLists || []} prices={prices} stores={stores}
+          setPrice={setPrice} setStore={setStore}
+          addOneoffList={addOneoffList} deleteOneoffList={deleteOneoffList} renameOneoffList={renameOneoffList}
+          completeOneoffList={completeOneoffList} reopenOneoffList={reopenOneoffList}
+          addOneoffItem={addOneoffItem} setOneoffItem={setOneoffItem} deleteOneoffItem={deleteOneoffItem}
+          toggleOneoffChecked={toggleOneoffChecked} sweepCompletedOneoffs={sweepCompletedOneoffs} />
+      ) : (
+      <>
       {totalItems > 0 && (
         <div style={{ marginBottom: 14, padding: "11px 14px", background: "var(--inset)", border: "1px solid var(--border-soft)", borderRadius: 10 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
@@ -351,6 +372,8 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setExtra,
             })}
           </>
         )
+      )}
+      </>
       )}
 
       {toast && (

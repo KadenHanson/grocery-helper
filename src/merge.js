@@ -10,13 +10,14 @@
 // truth on load" behavior for un-migrated docs, whose timestamps are all 0.
 //
 // Entity keying:
-//   meals, extraItems      -> arrays of objects keyed by `id`
+//   meals, extraItems, oneoffLists -> arrays of objects keyed by `id`
+//     (a one-off list's items/checked ride inside its object: whole-list LWW)
 //   manualPlan, groceryOverrides -> plain objects keyed by their own keys
 //   importedPlan           -> a single blob (bulk-replaced, no per-row identity)
 
 export const TOMBSTONE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
 
-const KEYED = ["meals", "extraItems", "manualPlan", "groceryOverrides", "checkedItems", "prices", "stores", "qtyTypes"];
+const KEYED = ["meals", "extraItems", "manualPlan", "groceryOverrides", "checkedItems", "prices", "stores", "qtyTypes", "oneoffLists"];
 
 function now() { return Date.now(); }
 
@@ -29,11 +30,11 @@ const byId = (arr) => Object.fromEntries((arr || []).map((o) => [o.id, o]));
 export function emptyMeta() {
   return {
     v: 1,
-    meals: {}, extraItems: {}, manualPlan: {}, groceryOverrides: {}, checkedItems: {}, prices: {}, stores: {}, qtyTypes: {},
+    meals: {}, extraItems: {}, manualPlan: {}, groceryOverrides: {}, checkedItems: {}, prices: {}, stores: {}, qtyTypes: {}, oneoffLists: {},
     importedPlan: 0,
     planStart: 0,
     weekCount: 0,
-    del: { meals: {}, extraItems: {}, manualPlan: {}, groceryOverrides: {}, checkedItems: {}, prices: {}, stores: {}, qtyTypes: {} },
+    del: { meals: {}, extraItems: {}, manualPlan: {}, groceryOverrides: {}, checkedItems: {}, prices: {}, stores: {}, qtyTypes: {}, oneoffLists: {} },
   };
 }
 
@@ -96,6 +97,7 @@ export function stampMeta(prev, next) {
   const t = now();
   stampMap(byId(prev.meals), byId(next.meals), meta.meals, meta.del.meals, t);
   stampMap(byId(prev.extraItems), byId(next.extraItems), meta.extraItems, meta.del.extraItems, t);
+  stampMap(byId(prev.oneoffLists), byId(next.oneoffLists), meta.oneoffLists, meta.del.oneoffLists, t);
   stampMap(prev.manualPlan || {}, next.manualPlan || {}, meta.manualPlan, meta.del.manualPlan, t);
   stampMap(prev.groceryOverrides || {}, next.groceryOverrides || {}, meta.groceryOverrides, meta.del.groceryOverrides, t);
   stampMap(prev.checkedItems || {}, next.checkedItems || {}, meta.checkedItems, meta.del.checkedItems, t);
@@ -164,6 +166,7 @@ export function mergeStates(local, cloud) {
   const out = {};
   out.meals = mergeArray(local.meals, cloud.meals, a.meals, a.del.meals, b.meals, b.del.meals, meta.meals, meta.del.meals);
   out.extraItems = mergeArray(local.extraItems, cloud.extraItems, a.extraItems, a.del.extraItems, b.extraItems, b.del.extraItems, meta.extraItems, meta.del.extraItems);
+  out.oneoffLists = mergeArray(local.oneoffLists, cloud.oneoffLists, a.oneoffLists, a.del.oneoffLists, b.oneoffLists, b.del.oneoffLists, meta.oneoffLists, meta.del.oneoffLists);
   out.manualPlan = mergeMap(local.manualPlan || {}, a.manualPlan, a.del.manualPlan, cloud.manualPlan || {}, b.manualPlan, b.del.manualPlan, meta.manualPlan, meta.del.manualPlan);
   out.groceryOverrides = mergeMap(local.groceryOverrides || {}, a.groceryOverrides, a.del.groceryOverrides, cloud.groceryOverrides || {}, b.groceryOverrides, b.del.groceryOverrides, meta.groceryOverrides, meta.del.groceryOverrides);
   out.checkedItems = mergeMap(local.checkedItems || {}, a.checkedItems, a.del.checkedItems, cloud.checkedItems || {}, b.checkedItems, b.del.checkedItems, meta.checkedItems, meta.del.checkedItems);
