@@ -364,7 +364,10 @@ export function useStore() {
     return id;
   }
   function deleteOneoffList(id) { update(s => ({ ...s, oneoffLists: (s.oneoffLists || []).filter(l => l.id !== id) })); }
-  function renameOneoffList(id, name) { editList(id, l => ({ ...l, name: (name || "").trim() })); }
+  // Store the title exactly as typed — trimming here (the input is controlled)
+  // would eat a trailing space mid-word, so spaces/punctuation could never be
+  // typed. Trim only at the display fallback.
+  function renameOneoffList(id, name) { editList(id, l => ({ ...l, name: name ?? "" })); }
   function completeOneoffList(id) { editList(id, l => l.completedAt ? l : ({ ...l, completedAt: new Date().toISOString() })); }
   function reopenOneoffList(id) { editList(id, l => ({ ...l, completedAt: null })); }
 

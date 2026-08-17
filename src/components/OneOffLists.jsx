@@ -146,7 +146,7 @@ export default function OneOffLists({
       <Block key={l.id}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }} onClick={() => setOpenDone(o => ({ ...o, [l.id]: !o[l.id] }))}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--heading)" }}>{l.name || `List — ${fmt(l.createdAt)}`}</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--heading)" }}>{(l.name || "").trim() || `List — ${fmt(l.createdAt)}`}</div>
             <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 2 }}>
               Created {fmt(l.createdAt)} → Completed {fmt(l.completedAt)} · {l.items.length} item{l.items.length !== 1 ? "s" : ""}
             </div>
