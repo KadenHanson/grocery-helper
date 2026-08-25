@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { STORES, makeStoreGuesser, priceKey } from "../constants";
+import { STORES, CATEGORIES, makeStoreGuesser, priceKey } from "../constants";
 import { Btn, BtnSm, Input, Block, EmptyState, PriceInput } from "./UI";
 
 // Bare quantity (no meal/ind qualifier — one-offs are always individual).
@@ -19,6 +19,10 @@ export default function OneOffLists({
   const [drafts, setDrafts] = useState({});   // listId -> add-item text
   const [editing, setEditing] = useState(null); // { listId, itemId, name, qty }
   const [openDone, setOpenDone] = useState({}); // completed listId -> expanded
+  // Group items by store → category (like the main Shop view) vs. added order.
+  // Per-device display pref, not synced.
+  const [grouped, setGrouped] = useState(() => { try { return localStorage.getItem("oneoff_grouped") === "1"; } catch { return false; } });
+  const toggleGrouped = () => setGrouped(g => { const n = !g; try { localStorage.setItem("oneoff_grouped", n ? "1" : "0"); } catch { /* ignore */ } return n; });
 
   // Archive fully-checked lists whenever we leave the Active view — on unmount
   // (switching away from One-off) and when flipping to Completed.
@@ -31,6 +35,22 @@ export default function OneOffLists({
   const lineTotal = (it) => (priceOf(it.name) || 0) * (it.qty || 1);
   const listTotal = (l) => l.items.reduce((s, it) => s + lineTotal(it), 0);
 
+  // Cluster a list's items by store (STORES order, Unassigned last), then by
+  // category within each store (CATEGORIES order, unknowns last) — mirrors the
+  // main grocery Shop view. Used when the "Group by store" toggle is on.
+  const storeOrder = [...STORES, "Unassigned"];
+  function groupByStore(items) {
+    const byStore = {};
+    items.forEach(it => { const st = storeOf(it.name); (byStore[st] || (byStore[st] = [])).push(it); });
+    return storeOrder.filter(s => byStore[s]).map(s => {
+      const byCat = {};
+      byStore[s].forEach(it => { const c = it.category || "Other"; (byCat[c] || (byCat[c] = [])).push(it); });
+      const cats = CATEGORIES.filter(c => byCat[c]);
+      Object.keys(byCat).forEach(c => { if (!CATEGORIES.includes(c)) cats.push(c); });
+      return { store: s, items: byStore[s], cats: cats.map(c => ({ category: c, items: byCat[c] })) };
+    });
+  }
+
   const active = (lists || []).filter(l => !l.completedAt);
   const completed = (lists || []).filter(l => l.completedAt)
     .sort((a, b) => (b.completedAt || "").localeCompare(a.completedAt || ""));
@@ -38,15 +58,17 @@ export default function OneOffLists({
   const fmt = (iso) => { try { return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" }); } catch { return ""; } };
 
   const itemStyle = { fontSize: 14, color: "var(--text-2)", display: "flex", alignItems: "stretch", borderBottom: "1px solid var(--border-soft)", margin: "0 -16px", padding: "0 16px" };
-  const delStyle = { display: "flex", alignItems: "center", justifyContent: "center", width: 40, flexShrink: 0, borderLeft: "1px solid var(--border-soft)", marginLeft: 6, cursor: "pointer", color: "var(--ghost)", fontSize: 17 };
-  const storeSelectStyle = { width: 92, flexShrink: 0, alignSelf: "center", marginLeft: 8, background: "var(--inset)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--muted)", fontSize: 11, padding: "5px 4px", fontFamily: "inherit" };
+  const delStyle = { display: "flex", alignItems: "center", justifyContent: "center", width: 34, flexShrink: 0, cursor: "pointer", color: "var(--ghost)", fontSize: 17 };
+  const storeSelectStyle = { width: 92, flexShrink: 0, background: "var(--inset)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--muted)", fontSize: 11, padding: "5px 4px", fontFamily: "inherit" };
   const bigCheck = (on) => ({ display: "flex", alignItems: "center", justifyContent: "center", width: 42, height: 44, flexShrink: 0, fontSize: 24, color: on ? "var(--accent)" : "var(--ghost)", userSelect: "none", cursor: "pointer" });
+  const stepBtn = { width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--btn-bg)", border: "1px solid var(--border)", color: "var(--text-2)", borderRadius: 6, fontSize: 16, cursor: "pointer", userSelect: "none", fontFamily: "inherit", lineHeight: 1 };
+  const setQty = (l, it, delta) => setOneoffItem(l.id, it.id, { qty: Math.max(1, (it.qty || 1) + delta) });
 
   function priceCell(name) {
     const stored = priceOf(name);
     return (
       <PriceInput defaultValue={stored ?? ""} valueKey={(name || "").toLowerCase() + ":" + (stored ?? "")}
-        stopClick wrapperStyle={{ marginLeft: 8, alignSelf: "center" }} inputStyle={{ width: 62 }}
+        stopClick inputStyle={{ width: 62 }}
         onCommit={v => { if (String(v) !== String(stored ?? "")) setPrice(name, v); }} />
     );
   }
@@ -80,6 +102,49 @@ export default function OneOffLists({
     </button>
   );
 
+  // One active-list item row (shared by added-order and grouped rendering).
+  function renderItem(l, it) {
+    const on = !!l.checked[it.id];
+    if (editing && editing.listId === l.id && editing.itemId === it.id) {
+      return (
+        <div key={it.id} style={{ ...itemStyle, flexWrap: "wrap", padding: "10px 16px", gap: 6, alignItems: "center" }}>
+          <Input value={editing.name} onChange={e => setEditing(ed => ({ ...ed, name: e.target.value }))}
+            onKeyDown={e => e.key === "Enter" && saveItemEdit()} style={{ flex: 2, minWidth: 120 }} autoFocus />
+          <Input value={editing.qty} onChange={e => setEditing(ed => ({ ...ed, qty: e.target.value }))} type="number" style={{ width: 64 }} />
+          <Btn variant="primary" onClick={saveItemEdit} style={{ padding: "7px 12px", fontSize: 12 }}>Save</Btn>
+          <Btn onClick={() => setEditing(null)} style={{ padding: "7px 12px", fontSize: 12 }}>Cancel</Btn>
+        </div>
+      );
+    }
+    const total = lineTotal(it);
+    return (
+      <div key={it.id} style={{ margin: "0 -16px", padding: "0 16px", borderBottom: "1px solid var(--border-soft)" }}>
+        {/* Line 1: name owns the width, plus qty stepper + delete */}
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <div style={bigCheck(on)} onClick={() => toggleOneoffChecked(l.id, it.id)}>{on ? "☑" : "☐"}</div>
+          <span onClick={() => setEditing({ listId: l.id, itemId: it.id, name: it.name, qty: String(it.qty) })}
+            style={{ flex: 1, minWidth: 0, padding: "10px 0", cursor: "pointer", fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: on ? "line-through" : "none", color: on ? "var(--faint)" : "var(--text)" }}>
+            {it.name}
+          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, marginLeft: 8 }}>
+            <button onClick={() => setQty(l, it, -1)} disabled={(it.qty || 1) <= 1}
+              style={{ ...stepBtn, opacity: (it.qty || 1) <= 1 ? 0.4 : 1, cursor: (it.qty || 1) <= 1 ? "default" : "pointer" }}>−</button>
+            <span style={{ minWidth: 18, textAlign: "center", fontSize: 14, color: "var(--muted)" }}>{it.qty || 1}</span>
+            <button onClick={() => setQty(l, it, 1)} style={stepBtn}>+</button>
+          </div>
+          <div style={delStyle} onClick={() => deleteOneoffItem(l.id, it.id)}>✕</div>
+        </div>
+        {/* Line 2: quiet meta — store · price · line total, indented under the name */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 0 10px 42px" }}>
+          {storeCell(it.name)}
+          {priceCell(it.name)}
+          <span style={{ fontSize: 11, color: "var(--faint)" }}>ea</span>
+          {total > 0 && <span style={{ marginLeft: "auto", fontSize: 13, color: "var(--muted)" }}>${total.toFixed(2)}</span>}
+        </div>
+      </div>
+    );
+  }
+
   function activeListCard(l) {
     const checkedCount = l.items.filter(it => l.checked[it.id]).length;
     const allDone = l.items.length > 0 && checkedCount === l.items.length;
@@ -97,33 +162,27 @@ export default function OneOffLists({
           {total > 0 && <span style={{ marginLeft: "auto", fontSize: 13, color: "var(--muted)" }}>${total.toFixed(2)}</span>}
         </div>
 
-        {l.items.map(it => {
-          const on = !!l.checked[it.id];
-          if (editing && editing.listId === l.id && editing.itemId === it.id) {
-            return (
-              <div key={it.id} style={{ ...itemStyle, flexWrap: "wrap", padding: "10px 16px", gap: 6, alignItems: "center" }}>
-                <Input value={editing.name} onChange={e => setEditing(ed => ({ ...ed, name: e.target.value }))}
-                  onKeyDown={e => e.key === "Enter" && saveItemEdit()} style={{ flex: 2, minWidth: 120 }} autoFocus />
-                <Input value={editing.qty} onChange={e => setEditing(ed => ({ ...ed, qty: e.target.value }))} type="number" style={{ width: 64 }} />
-                <Btn variant="primary" onClick={saveItemEdit} style={{ padding: "7px 12px", fontSize: 12 }}>Save</Btn>
-                <Btn onClick={() => setEditing(null)} style={{ padding: "7px 12px", fontSize: 12 }}>Cancel</Btn>
-              </div>
-            );
-          }
-          return (
-            <div key={it.id} style={itemStyle}>
-              <div style={bigCheck(on)} onClick={() => toggleOneoffChecked(l.id, it.id)}>{on ? "☑" : "☐"}</div>
-              <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, minWidth: 0, cursor: "pointer", padding: "10px 0" }}
-                onClick={() => setEditing({ listId: l.id, itemId: it.id, name: it.name, qty: String(it.qty) })}>
-                <span style={{ flex: 1, textDecoration: on ? "line-through" : "none", color: on ? "var(--faint)" : undefined }}>{it.name}</span>
-                <Qty n={it.qty} />
-              </div>
-              {storeCell(it.name)}
-              {priceCell(it.name)}
-              <div style={delStyle} onClick={() => deleteOneoffItem(l.id, it.id)}>✕</div>
-            </div>
-          );
-        })}
+        {grouped
+          ? groupByStore(l.items).map(g => {
+              const gChecked = g.items.filter(it => l.checked[it.id]).length;
+              const gSubtotal = g.items.reduce((s, it) => s + lineTotal(it), 0);
+              return (
+                <div key={g.store} style={{ marginTop: 10 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 8, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: "var(--heading)" }}>{g.store}</span>
+                    <span style={{ fontSize: 11, color: gChecked === g.items.length ? "var(--accent)" : "var(--faint)" }}>{gChecked}/{g.items.length}</span>
+                    {gSubtotal > 0 && <span style={{ marginLeft: "auto", fontSize: 13, color: "var(--muted)" }}>${gSubtotal.toFixed(2)}</span>}
+                  </div>
+                  {g.cats.map(cg => (
+                    <div key={cg.category}>
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: "var(--ghost)", textTransform: "uppercase", margin: "8px 0 0" }}>{cg.category}</div>
+                      {cg.items.map(it => renderItem(l, it))}
+                    </div>
+                  ))}
+                </div>
+              );
+            })
+          : l.items.map(it => renderItem(l, it))}
 
         <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
           <Input value={drafts[l.id] || ""} onChange={e => setDrafts(d => ({ ...d, [l.id]: e.target.value }))}
@@ -179,6 +238,7 @@ export default function OneOffLists({
       <div style={{ display: "flex", gap: 6, marginBottom: 16, alignItems: "center" }}>
         {pill(sub === "active", () => setSub("active"), `Active${active.length ? ` · ${active.length}` : ""}`)}
         {pill(sub === "completed", goCompleted, `Completed${completed.length ? ` · ${completed.length}` : ""}`)}
+        {sub === "active" && pill(grouped, toggleGrouped, grouped ? "⇅ By store" : "⇅ Added order")}
         {sub === "active" && <Btn variant="primary" onClick={() => addOneoffList()} style={{ marginLeft: "auto", padding: "6px 14px", fontSize: 12 }}>+ New list</Btn>}
       </div>
 
