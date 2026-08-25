@@ -19,10 +19,15 @@ export default function OneOffLists({
   const [drafts, setDrafts] = useState({});   // listId -> add-item text
   const [editing, setEditing] = useState(null); // { listId, itemId, name, qty }
   const [openDone, setOpenDone] = useState({}); // completed listId -> expanded
-  // Group items by store → category (like the main Shop view) vs. added order.
-  // Per-device display pref, not synced.
-  const [grouped, setGrouped] = useState(() => { try { return localStorage.getItem("oneoff_grouped") === "1"; } catch { return false; } });
-  const toggleGrouped = () => setGrouped(g => { const n = !g; try { localStorage.setItem("oneoff_grouped", n ? "1" : "0"); } catch { /* ignore */ } return n; });
+  // Which lists render grouped by store → category (like the main Shop view)
+  // vs. added order. Tracked per-list, per-device (not synced).
+  const [groupedIds, setGroupedIds] = useState(() => { try { return new Set(JSON.parse(localStorage.getItem("oneoff_grouped_ids") || "[]")); } catch { return new Set(); } });
+  const toggleGrouped = (id) => setGroupedIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    try { localStorage.setItem("oneoff_grouped_ids", JSON.stringify([...next])); } catch { /* ignore */ }
+    return next;
+  });
 
   // Archive fully-checked lists whenever we leave the Active view — on unmount
   // (switching away from One-off) and when flipping to Completed.
@@ -149,11 +154,18 @@ export default function OneOffLists({
     const checkedCount = l.items.filter(it => l.checked[it.id]).length;
     const allDone = l.items.length > 0 && checkedCount === l.items.length;
     const total = listTotal(l);
+    const isGrouped = groupedIds.has(l.id);
     return (
       <Block key={l.id}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
           <Input value={l.name} onChange={e => renameOneoffList(l.id, e.target.value)}
             placeholder={`List — ${fmt(l.createdAt)}`} style={{ flex: 1, fontWeight: 600 }} />
+          {l.items.length > 0 && (
+            <button onClick={() => toggleGrouped(l.id)} title={isGrouped ? "Grouped by store — tap for added order" : "Added order — tap to group by store"}
+              style={{ flexShrink: 0, whiteSpace: "nowrap", padding: "6px 11px", borderRadius: 20, border: `1px solid ${isGrouped ? "var(--text)" : "var(--border)"}`, background: "none", color: isGrouped ? "var(--text)" : "var(--faint)", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+              ⇅ {isGrouped ? "Grouped" : "Group"}
+            </button>
+          )}
           <div onClick={() => deleteOneoffList(l.id)} style={{ ...delStyle, borderLeft: "none", marginLeft: 0, width: 34 }} title="Delete list">🗑</div>
         </div>
         <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
@@ -162,7 +174,7 @@ export default function OneOffLists({
           {total > 0 && <span style={{ marginLeft: "auto", fontSize: 13, color: "var(--muted)" }}>${total.toFixed(2)}</span>}
         </div>
 
-        {grouped
+        {isGrouped
           ? groupByStore(l.items).map(g => {
               const gChecked = g.items.filter(it => l.checked[it.id]).length;
               const gSubtotal = g.items.reduce((s, it) => s + lineTotal(it), 0);
@@ -238,7 +250,6 @@ export default function OneOffLists({
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16, alignItems: "center" }}>
         {pill(sub === "active", () => setSub("active"), `Active${active.length ? ` · ${active.length}` : ""}`)}
         {pill(sub === "completed", goCompleted, `Completed${completed.length ? ` · ${completed.length}` : ""}`)}
-        {sub === "active" && pill(grouped, toggleGrouped, grouped ? "⇅ By store" : "⇅ Added order")}
         {sub === "active" && <Btn variant="primary" onClick={() => addOneoffList()} style={{ marginLeft: "auto", padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap", flexShrink: 0 }}>+ New list</Btn>}
       </div>
 
