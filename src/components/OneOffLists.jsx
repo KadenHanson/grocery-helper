@@ -65,7 +65,6 @@ export default function OneOffLists({
   const itemStyle = { fontSize: 14, color: "var(--text-2)", display: "flex", alignItems: "stretch", borderBottom: "1px solid var(--border-soft)", margin: "0 -16px", padding: "0 16px" };
   const delStyle = { display: "flex", alignItems: "center", justifyContent: "center", width: 34, flexShrink: 0, cursor: "pointer", color: "var(--ghost)", fontSize: 17 };
   const storeSelectStyle = { width: 92, flexShrink: 0, background: "var(--inset)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--muted)", fontSize: 11, padding: "5px 4px", fontFamily: "inherit" };
-  const bigCheck = (on) => ({ display: "flex", alignItems: "center", justifyContent: "center", width: 42, height: 44, flexShrink: 0, fontSize: 24, color: on ? "var(--accent)" : "var(--ghost)", userSelect: "none", cursor: "pointer" });
   const stepBtn = { width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--btn-bg)", border: "1px solid var(--border)", color: "var(--text-2)", borderRadius: 6, fontSize: 16, cursor: "pointer", userSelect: "none", fontFamily: "inherit", lineHeight: 1 };
   const setQty = (l, it, delta) => setOneoffItem(l.id, it.id, { qty: Math.max(1, (it.qty || 1) + delta) });
 
@@ -123,28 +122,34 @@ export default function OneOffLists({
     }
     const total = lineTotal(it);
     return (
-      <div key={it.id} style={{ margin: "0 -16px", padding: "0 16px", borderBottom: "1px solid var(--border-soft)" }}>
-        {/* Line 1: name owns the width, plus qty stepper + delete */}
-        <div style={{ display: "flex", alignItems: "center" }}>
-          <div style={bigCheck(on)} onClick={() => toggleOneoffChecked(l.id, it.id)}>{on ? "☑" : "☐"}</div>
-          <span onClick={() => setEditing({ listId: l.id, itemId: it.id, name: it.name, qty: String(it.qty) })}
-            style={{ flex: 1, minWidth: 0, padding: "10px 0", cursor: "pointer", fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: on ? "line-through" : "none", color: on ? "var(--faint)" : "var(--text)" }}>
-            {it.name}
-          </span>
-          <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, marginLeft: 8 }}>
-            <button onClick={() => setQty(l, it, -1)} disabled={(it.qty || 1) <= 1}
-              style={{ ...stepBtn, opacity: (it.qty || 1) <= 1 ? 0.4 : 1, cursor: (it.qty || 1) <= 1 ? "default" : "pointer" }}>−</button>
-            <span style={{ minWidth: 18, textAlign: "center", fontSize: 14, color: "var(--muted)" }}>{it.qty || 1}</span>
-            <button onClick={() => setQty(l, it, 1)} style={stepBtn}>+</button>
-          </div>
-          <div style={delStyle} onClick={() => deleteOneoffItem(l.id, it.id)}>✕</div>
+      <div key={it.id} style={{ margin: "0 -16px", borderBottom: "1px solid var(--border-soft)", display: "flex", alignItems: "stretch" }}>
+        {/* Full-height checkbox column: big tap target spanning both lines, glyph centered */}
+        <div onClick={() => toggleOneoffChecked(l.id, it.id)}
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 54, flexShrink: 0, paddingLeft: 16, alignSelf: "stretch", fontSize: 24, color: on ? "var(--accent)" : "var(--ghost)", userSelect: "none", cursor: "pointer" }}>
+          {on ? "☑" : "☐"}
         </div>
-        {/* Line 2: quiet meta — store · price · line total, indented under the name */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 0 10px 42px" }}>
-          {storeCell(it.name)}
-          {priceCell(it.name)}
-          <span style={{ fontSize: 11, color: "var(--faint)" }}>ea</span>
-          {total > 0 && <span style={{ marginLeft: "auto", fontSize: 13, color: "var(--muted)" }}>${total.toFixed(2)}</span>}
+        <div style={{ flex: 1, minWidth: 0, paddingRight: 16 }}>
+          {/* Line 1: name owns the width, plus qty stepper + delete */}
+          <div style={{ display: "flex", alignItems: "center" }}>
+            <span onClick={() => setEditing({ listId: l.id, itemId: it.id, name: it.name, qty: String(it.qty) })}
+              style={{ flex: 1, minWidth: 0, padding: "10px 0", cursor: "pointer", fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: on ? "line-through" : "none", color: on ? "var(--faint)" : "var(--text)" }}>
+              {it.name}
+            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, marginLeft: 8 }}>
+              <button onClick={() => setQty(l, it, -1)} disabled={(it.qty || 1) <= 1}
+                style={{ ...stepBtn, opacity: (it.qty || 1) <= 1 ? 0.4 : 1, cursor: (it.qty || 1) <= 1 ? "default" : "pointer" }}>−</button>
+              <span style={{ minWidth: 18, textAlign: "center", fontSize: 14, color: "var(--muted)" }}>{it.qty || 1}</span>
+              <button onClick={() => setQty(l, it, 1)} style={stepBtn}>+</button>
+            </div>
+            <div style={delStyle} onClick={() => deleteOneoffItem(l.id, it.id)}>✕</div>
+          </div>
+          {/* Line 2: quiet meta — store · price · line total */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 0 10px 0" }}>
+            {storeCell(it.name)}
+            {priceCell(it.name)}
+            <span style={{ fontSize: 11, color: "var(--faint)" }}>ea</span>
+            {total > 0 && <span style={{ marginLeft: "auto", fontSize: 13, color: "var(--muted)" }}>${total.toFixed(2)}</span>}
+          </div>
         </div>
       </div>
     );
