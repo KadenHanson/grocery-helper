@@ -12,12 +12,12 @@ export const CATEGORIES = [
 export const STORES = ["Walmart", "Sam's Club", "Costco", "Target", "Publix"];
 
 export const CAT_KEYWORDS = {
-  "Meat & Protein": ["chicken","beef","sausage","pork","turkey","steak","meat","bacon","shrimp","fish","salmon","tuna","ham"],
+  "Meat & Protein": ["chicken","beef","sausage","pork","turkey","steak","meat","bacon","shrimp","fish","salmon","tuna","ham","roast","brisket","ribs","chuck","tenderloin"],
   "Produce": ["broccoli","lettuce","tomato","tomatoes","onion","garlic","corn","pepper","spinach","carrot","celery","lemon","lime","avocado","mushroom","zucchini","cucumber","potato"],
-  "Dairy": ["cheese","milk","butter","cream","sour cream","yogurt","parmesan","mozzarella","egg","eggs","half and half"],
+  "Dairy": ["cheese","milk","butter","cream","sour cream","yogurt","parmesan","mozzarella","provolone","cheddar","gouda","feta","ricotta","colby","brie","havarti","swiss cheese","american cheese","cottage cheese","egg","eggs","half and half"],
   "Dry & Pasta": ["rice","pasta","noodle","spaghetti","fettuccine","penne","macaroni","flour","bread crumb","oat","quinoa","rice-a-roni"],
   "Canned & Jarred": ["canned","salsa","beans","tomato sauce","crushed tomatoes","diced tomatoes","tomato paste","broth","stock","olives","vegetable","vegetables","soup"],
-  "Sauces & Seasoning": ["sauce","seasoning","dressing","marinade","teriyaki","bbq","cajun","oil","vinegar","soy","mustard","ketchup","ranch","hot sauce","mayo","spice","garlic powder","onion powder","black pepper","paprika","cumin","alfredo","pasta sauce"],
+  "Sauces & Seasoning": ["sauce","seasoning","dressing","marinade","teriyaki","bbq","cajun","oil","vinegar","soy","mustard","ketchup","ranch","hot sauce","mayo","spice","garlic powder","onion powder","black pepper","paprika","cumin","alfredo","pasta sauce","au jus","gravy","onion soup","soup mix","dip mix"],
   "Frozen": ["frozen","potsticker","dumpling","ice cream","pizza"],
   "Bread & Bakery": ["bread","garlic bread","tortilla","bun","roll","loaf","pita","wrap","crouton"],
 };
@@ -39,6 +39,10 @@ export const DEFAULT_MEALS = [
 // keeps simple plurals working ("onions" matches "onion").
 export function guessCategory(name) {
   const n = (name || "").toLowerCase();
+  // A prepared soup is Canned & Jarred whatever its ingredients ("chicken
+  // noodle soup" is not Meat) — but a dry mix/packet ("onion soup mix") shops
+  // in the seasoning aisle, so let those fall through to the keyword match.
+  if (n.includes("soup") && !(n.includes("mix") || n.includes("packet"))) return "Canned & Jarred";
   let bestCat = "Other", bestLen = 0, bestOrder = Infinity;
   for (const [cat, keywords] of Object.entries(CAT_KEYWORDS)) {
     const order = CATEGORIES.indexOf(cat);

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { STORES, CATEGORIES, makeStoreGuesser, priceKey } from "../constants";
+import { STORES, CATEGORIES, guessCategory, makeStoreGuesser, priceKey } from "../constants";
 import { Btn, BtnSm, Input, Block, EmptyState, PriceInput } from "./UI";
 
 // Bare quantity (no meal/ind qualifier — one-offs are always individual).
@@ -49,7 +49,9 @@ export default function OneOffLists({
     items.forEach(it => { const st = storeOf(it.name); (byStore[st] || (byStore[st] = [])).push(it); });
     return storeOrder.filter(s => byStore[s]).map(s => {
       const byCat = {};
-      byStore[s].forEach(it => { const c = it.category || "Other"; (byCat[c] || (byCat[c] = [])).push(it); });
+      // Recompute from the current heuristics (one-off categories are never
+      // hand-edited), so keyword improvements re-bucket existing lists.
+      byStore[s].forEach(it => { const c = guessCategory(it.name); (byCat[c] || (byCat[c] = [])).push(it); });
       const cats = CATEGORIES.filter(c => byCat[c]);
       Object.keys(byCat).forEach(c => { if (!CATEGORIES.includes(c)) cats.push(c); });
       return { store: s, items: byStore[s], cats: cats.map(c => ({ category: c, items: byCat[c] })) };
