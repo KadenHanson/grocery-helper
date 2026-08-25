@@ -97,7 +97,7 @@ export default function OneOffLists({
 
   const pill = (activeOn, onClick, label) => (
     <button onClick={onClick}
-      style={{ padding: "6px 14px", borderRadius: 20, border: `1px solid ${activeOn ? "var(--text)" : "var(--border)"}`, background: "none", color: activeOn ? "var(--text)" : "var(--faint)", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+      style={{ padding: "6px 14px", borderRadius: 20, border: `1px solid ${activeOn ? "var(--text)" : "var(--border)"}`, background: "none", color: activeOn ? "var(--text)" : "var(--faint)", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0 }}>
       {label}
     </button>
   );
@@ -235,11 +235,11 @@ export default function OneOffLists({
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 6, marginBottom: 16, alignItems: "center" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16, alignItems: "center" }}>
         {pill(sub === "active", () => setSub("active"), `Active${active.length ? ` · ${active.length}` : ""}`)}
         {pill(sub === "completed", goCompleted, `Completed${completed.length ? ` · ${completed.length}` : ""}`)}
         {sub === "active" && pill(grouped, toggleGrouped, grouped ? "⇅ By store" : "⇅ Added order")}
-        {sub === "active" && <Btn variant="primary" onClick={() => addOneoffList()} style={{ marginLeft: "auto", padding: "6px 14px", fontSize: 12 }}>+ New list</Btn>}
+        {sub === "active" && <Btn variant="primary" onClick={() => addOneoffList()} style={{ marginLeft: "auto", padding: "6px 14px", fontSize: 12, whiteSpace: "nowrap", flexShrink: 0 }}>+ New list</Btn>}
       </div>
 
       {sub === "active" ? (
