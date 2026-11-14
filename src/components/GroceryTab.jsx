@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { DAYS, WEEKDAY_TO_SHORT, CATEGORIES, STORES, makeStoreGuesser, guessCategory, priceKey, TAX_RATE } from "../constants";
+import { DAYS, WEEKDAY_TO_SHORT, CATEGORIES, STORES, makeStoreGuesser, guessCategory, priceKey, storePriceKey, lookupPrice, TAX_RATE } from "../constants";
 import { aggregateIngredients, applyOverrides } from "../useStore";
 import { Btn, BtnSm, Input, Label, Block, EmptyState, QtyTag, PriceInput } from "./UI";
 import OneOffLists from "./OneOffLists";
@@ -32,13 +32,15 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setExtra,
   const checked = checkedItems || {};
   const priceMap = prices || {};
   const storeMap = stores || {};
-  const priceOf = (name) => priceMap[priceKey(name)];
   const storeRaw = (name) => storeMap[(name || "").trim().toLowerCase()] || "";
   // Effective store: explicit assignment, else a guess learned from THIS
   // household's own assignments (most-used store for the item's category, then
   // overall, then a generic default). Used for Shop grouping + the Manage picker.
   const storeGuess = makeStoreGuesser(storeMap);
   const storeOf = (name) => storeRaw(name) || storeGuess(name);
+  // Price for the item AT its effective store, falling back to any known price
+  // (see lookupPrice) so an item assigned to a new store still prefills.
+  const priceOf = (name) => lookupPrice(priceMap, name, storeOf(name));
   // Quantity qualifier (display-only): "meal" (meals-worth) vs "ind" (individual).
   const qtyMap = qtyTypes || {};
   const qtyTypeOf = (name) => qtyMap[priceKey(name)] === "meal" ? "meal" : "ind";
@@ -171,11 +173,14 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setExtra,
   const storeSelectStyle = { width: 92, flexShrink: 0, alignSelf: "center", marginLeft: 8, background: "var(--inset)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--muted)", fontSize: 11, padding: "5px 4px", fontFamily: "inherit" };
 
   function priceCell(name) {
+    const store = storeOf(name);
     const stored = priceOf(name);
     return (
-      <PriceInput defaultValue={stored ?? ""} valueKey={(name || "").toLowerCase() + ":" + (stored ?? "")}
+      // valueKey includes the store so switching the store dropdown re-seeds the
+      // field with that store's remembered price. Commit writes the (item,store) key.
+      <PriceInput defaultValue={stored ?? ""} valueKey={storePriceKey(name, store) + ":" + (stored ?? "")}
         stopClick wrapperStyle={{ marginLeft: 8, alignSelf: "center" }} inputStyle={{ width: 62 }}
-        onCommit={v => { if (String(v) !== String(stored ?? "")) setPrice(name, v); }} />
+        onCommit={v => { if (String(v) !== String(stored ?? "")) setPrice(name, v, store); }} />
     );
   }
   function storeCell(name) {
@@ -232,7 +237,7 @@ export default function GroceryTab({ state, addExtraItem, deleteExtra, setExtra,
       {mode === "oneoff" ? (
         <OneOffLists
           lists={state.oneoffLists || []} prices={prices} stores={stores}
-          setPrice={setPrice} setStore={setStore}
+          setPrice={setPrice}
           addOneoffList={addOneoffList} deleteOneoffList={deleteOneoffList} renameOneoffList={renameOneoffList}
           completeOneoffList={completeOneoffList} reopenOneoffList={reopenOneoffList}
           addOneoffItem={addOneoffItem} setOneoffItem={setOneoffItem} deleteOneoffItem={deleteOneoffItem}

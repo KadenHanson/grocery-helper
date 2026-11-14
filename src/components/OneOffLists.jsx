@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { STORES, CATEGORIES, guessCategory, makeStoreGuesser, priceKey } from "../constants";
+import { STORES, CATEGORIES, guessCategory, makeStoreGuesser, storePriceKey, lookupPrice } from "../constants";
 import { Btn, BtnSm, Input, Block, EmptyState, PriceInput } from "./UI";
 
 // Bare quantity (no meal/ind qualifier — one-offs are always individual).
@@ -9,9 +9,11 @@ const Qty = ({ n }) => n > 1 ? <span style={{ color: "var(--faint)", fontSize: 1
 // grocery list. Each list combines the Manage + Shop affordances in one row
 // (check off, edit name/qty, set store + price) since these lists are short.
 // A fully-checked list auto-archives to Completed when you leave the Active
-// view (or via "Mark done"); prices/stores reuse the shared global maps.
+// view (or via "Mark done"). Store is set PER one-off item (it.store) so a run
+// to a different chain than usual doesn't clobber the item's global default;
+// prices come from the shared (item, store) repository via lookupPrice.
 export default function OneOffLists({
-  lists, prices, stores, setPrice, setStore,
+  lists, prices, stores, setPrice,
   addOneoffList, deleteOneoffList, renameOneoffList, completeOneoffList, reopenOneoffList,
   addOneoffItem, setOneoffItem, deleteOneoffItem, toggleOneoffChecked, sweepCompletedOneoffs,
 }) {
@@ -34,10 +36,12 @@ export default function OneOffLists({
   useEffect(() => () => sweepCompletedOneoffs(), []); // eslint-disable-line react-hooks/exhaustive-deps
   const goCompleted = () => { sweepCompletedOneoffs(); setSub("completed"); };
 
-  const priceOf = (name) => (prices || {})[priceKey(name)];
   const storeGuess = makeStoreGuesser(stores || {});
-  const storeOf = (name) => (stores || {})[(name || "").trim().toLowerCase()] || storeGuess(name);
-  const lineTotal = (it) => (priceOf(it.name) || 0) * (it.qty || 1);
+  // Effective store for a one-off item: its own per-item pick, else the item's
+  // global default, else a household-learned guess.
+  const storeOf = (it) => it.store || (stores || {})[(it.name || "").trim().toLowerCase()] || storeGuess(it.name);
+  const priceOf = (name, store) => lookupPrice(prices, name, store);
+  const lineTotal = (it) => (priceOf(it.name, storeOf(it)) || 0) * (it.qty || 1);
   const listTotal = (l) => l.items.reduce((s, it) => s + lineTotal(it), 0);
 
   // Cluster a list's items by store (STORES order, Unassigned last), then by
@@ -46,7 +50,7 @@ export default function OneOffLists({
   const storeOrder = [...STORES, "Unassigned"];
   function groupByStore(items) {
     const byStore = {};
-    items.forEach(it => { const st = storeOf(it.name); (byStore[st] || (byStore[st] = [])).push(it); });
+    items.forEach(it => { const st = storeOf(it); (byStore[st] || (byStore[st] = [])).push(it); });
     return storeOrder.filter(s => byStore[s]).map(s => {
       const byCat = {};
       // Recompute from the current heuristics (one-off categories are never
@@ -70,17 +74,20 @@ export default function OneOffLists({
   const stepBtn = { width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--btn-bg)", border: "1px solid var(--border)", color: "var(--text-2)", borderRadius: 6, fontSize: 16, cursor: "pointer", userSelect: "none", fontFamily: "inherit", lineHeight: 1 };
   const setQty = (l, it, delta) => setOneoffItem(l.id, it.id, { qty: Math.max(1, (it.qty || 1) + delta) });
 
-  function priceCell(name) {
-    const stored = priceOf(name);
+  function priceCell(l, it) {
+    const store = storeOf(it);
+    const stored = priceOf(it.name, store);
     return (
-      <PriceInput defaultValue={stored ?? ""} valueKey={(name || "").toLowerCase() + ":" + (stored ?? "")}
+      // valueKey carries the store so changing the dropdown re-seeds the field
+      // with that store's remembered price. Commit writes the (item, store) key.
+      <PriceInput defaultValue={stored ?? ""} valueKey={storePriceKey(it.name, store) + ":" + (stored ?? "")}
         stopClick inputStyle={{ width: 62 }}
-        onCommit={v => { if (String(v) !== String(stored ?? "")) setPrice(name, v); }} />
+        onCommit={v => { if (String(v) !== String(stored ?? "")) setPrice(it.name, v, store); }} />
     );
   }
-  function storeCell(name) {
+  function storeCell(l, it) {
     return (
-      <select value={storeOf(name)} onClick={e => e.stopPropagation()} onChange={e => setStore(name, e.target.value)} style={storeSelectStyle}>
+      <select value={storeOf(it)} onClick={e => e.stopPropagation()} onChange={e => setOneoffItem(l.id, it.id, { store: e.target.value })} style={storeSelectStyle}>
         <option value="">Auto</option>
         {STORES.map(s => <option key={s} value={s}>{s}</option>)}
       </select>
@@ -147,8 +154,8 @@ export default function OneOffLists({
           </div>
           {/* Line 2: quiet meta — store · price · line total */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 0 10px 0" }}>
-            {storeCell(it.name)}
-            {priceCell(it.name)}
+            {storeCell(l, it)}
+            {priceCell(l, it)}
             <span style={{ fontSize: 11, color: "var(--faint)" }}>ea</span>
             {total > 0 && <span style={{ marginLeft: "auto", fontSize: 13, color: "var(--muted)" }}>${total.toFixed(2)}</span>}
           </div>

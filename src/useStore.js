@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { guessCategory, normalize, isSpecial, CATEGORIES, priceKey, titleCaseName } from "./constants";
+import { guessCategory, normalize, isSpecial, CATEGORIES, priceKey, storePriceKey, titleCaseName } from "./constants";
 import { loadFromCloud, saveToCloud, loadFromLocal, saveToLocal, cloudConfigured } from "./storage";
 import { normalizeMeta, stampMeta, mergeStates, genId } from "./merge";
 
@@ -416,11 +416,12 @@ export function useStore() {
   }
   function clearChecked() { update(s => ({ ...s, checkedItems: {} })); }
 
-  // Remembered per-item unit prices, keyed by lowercased item name so a price
-  // typed once carries across weeks and applies to any item with that name.
-  // Empty/invalid clears the entry.
-  function setPrice(name, value) {
-    const key = priceKey(name);
+  // Remembered per-item unit prices. Keyed by (item, store) via storePriceKey so
+  // a price carries across weeks AND can differ per store; a falsy store writes
+  // the bare/default key (Meals-tab defaults and imports pass no store).
+  // Empty/invalid clears that specific entry.
+  function setPrice(name, value, store) {
+    const key = storePriceKey(name, store);
     const n = parseFloat(value);
     update(s => {
       const next = { ...s.prices };

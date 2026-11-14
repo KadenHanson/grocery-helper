@@ -153,6 +153,34 @@ export function priceKey(name) {
   return k;
 }
 
+// Store-aware price-repository key. A price is remembered per (item, store), so
+// the same item can carry a different price at a store you don't usually buy it
+// from (a one-off run to a different chain). A falsy store yields the bare item
+// key — which doubles as the cross-store default AND matches every legacy price
+// (those were name-only), so no migration is needed.
+export function storePriceKey(name, store) {
+  const base = priceKey(name);
+  const s = (store || "").trim().toLowerCase();
+  return s && s !== "unassigned" ? base + "|" + s : base;
+}
+
+// Resolve an item's remembered price for a store, falling back so a store you've
+// never priced still prefills a known number instead of a blank:
+//   1. the exact (item, store) price
+//   2. the bare/default key (legacy prices + Meals-tab defaults live here)
+//   3. any other store's price for the same item
+// Returns undefined only when the item has no remembered price anywhere.
+export function lookupPrice(priceMap, name, store) {
+  if (!priceMap) return undefined;
+  const exact = priceMap[storePriceKey(name, store)];
+  if (exact != null) return exact;
+  const base = priceMap[priceKey(name)];
+  if (base != null) return base;
+  const prefix = priceKey(name) + "|";
+  for (const k in priceMap) if (k.startsWith(prefix)) return priceMap[k];
+  return undefined;
+}
+
 // Sales tax rate for the optional estimate line (Orlando / Orange County, FL).
 export const TAX_RATE = 0.065;
 
